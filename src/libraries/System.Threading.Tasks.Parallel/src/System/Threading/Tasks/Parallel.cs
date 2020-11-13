@@ -59,8 +59,36 @@ namespace System.Threading.Tasks
             set { _scheduler = value; }
         }
 
-        // Convenience property used by TPL logic
-        internal TaskScheduler EffectiveTaskScheduler => _scheduler ?? TaskScheduler.Current;
+        internal TaskScheduler EffectiveTaskScheduler
+        {
+            get
+            {
+                TaskScheduler scheduler = _scheduler ?? TaskScheduler.Current;
+
+                if (OperatingSystem.IsBrowser() && scheduler == TaskScheduler.Default)
+                {
+                    // Browser has only a single thread. Until https://github.com/dotnet/runtime/issues/17148 is addressed
+                    // such that Parallel.* can cancel outstanding replicas rather than blocking waiting on them to
+                    // complete (which will never happen with only one thread), we can replace the default scheduler
+                    // with one that a) has a MaximumConcurrencyLevel of 1 (to avoid extra tasks being created in the first place
+                    // and b) always enables inlining regardless of what thread created the task.
+                    scheduler = SingleThreadAlwaysInliningTaskScheduler.Instance;
+                }
+
+                return scheduler;
+            }
+        }
+
+        private sealed class SingleThreadAlwaysInliningTaskScheduler : TaskScheduler
+        {
+            internal static SingleThreadAlwaysInliningTaskScheduler Instance { get; } = new SingleThreadAlwaysInliningTaskScheduler();
+
+            protected override void QueueTask(Task task) => ThreadPool.QueueUserWorkItem(s => TryExecuteTask((Task)s!), task);
+            protected override IEnumerable<Task> GetScheduledTasks() => Array.Empty<Task>();
+
+            protected override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued) => TryExecuteTask(task);
+            public override int MaximumConcurrencyLevel => 1;
+        }
 
         /// <summary>
         /// Gets or sets the maximum degree of parallelism enabled by this ParallelOptions instance.

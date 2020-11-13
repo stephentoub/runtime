@@ -125,7 +125,7 @@ namespace System.Threading.Tasks
 
         private TaskReplicator(ParallelOptions options, bool stopOnFirstFailure)
         {
-            _scheduler = options.TaskScheduler ?? TaskScheduler.Current;
+            _scheduler = options.EffectiveTaskScheduler;
             _stopOnFirstFailure = stopOnFirstFailure;
         }
 
