@@ -834,20 +834,10 @@ namespace System
             string? consoleAnsiColor = Environment.GetEnvironmentVariable("DOTNET_CONSOLE_ANSI_COLOR");
             if (consoleAnsiColor != null)
             {
-                return IsTrueStringIgnoreCase(consoleAnsiColor) || consoleAnsiColor.Equals("1");
+                return consoleAnsiColor == "1" || (bool.TryParse(consoleAnsiColor, out bool enabled) && enabled);
             }
 
             return !Console.IsOutputRedirected;
-        }
-
-        // Copied from System.Boolean (where it's internal)
-        private static bool IsTrueStringIgnoreCase(string value)
-        {
-            return value.Length == 4 &&
-                   (value[0] == 't' || value[0] == 'T') &&
-                   (value[1] == 'r' || value[1] == 'R') &&
-                   (value[2] == 'u' || value[2] == 'U') &&
-                   (value[3] == 'e' || value[3] == 'E');
         }
 
         /// <summary>
