@@ -755,6 +755,8 @@ namespace System
                     return "offset";
                 case ExceptionArgument.stream:
                     return "stream";
+                case ExceptionArgument.minimumLength:
+                    return "minimumLength";
                 default:
                     Debug.Fail("The enum value is not defined, please check the ExceptionArgument Enum.");
                     return "";
@@ -911,6 +913,8 @@ namespace System
                     return SR.Argument_SpansMustHaveSameLength;
                 case ExceptionResource.Argument_InvalidFlag:
                     return SR.Argument_InvalidFlag;
+                case ExceptionResource.ArgumentException_BufferNotFromPool:
+                    return SR.ArgumentException_BufferNotFromPool;
                 default:
                     Debug.Fail("The enum value is not defined, please check the ExceptionResource Enum.");
                     return "";
@@ -1015,7 +1019,8 @@ namespace System
         suffix,
         buffer,
         offset,
-        stream
+        stream,
+        minimumLength,
     }
 
     //
@@ -1090,5 +1095,6 @@ namespace System
         Arg_TypeNotSupported,
         Argument_SpansMustHaveSameLength,
         Argument_InvalidFlag,
+        ArgumentException_BufferNotFromPool,
     }
 }

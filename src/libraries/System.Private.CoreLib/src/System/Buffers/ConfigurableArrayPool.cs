@@ -90,7 +90,7 @@ namespace System.Buffers
                     {
                         if (log.IsEnabled())
                         {
-                            log.BufferRented(buffer.GetHashCode(), buffer.Length, Id, _buckets[i].Id);
+                            log.BufferRented(buffer, Id, _buckets[i].Id);
                         }
                         return buffer;
                     }
@@ -110,11 +110,7 @@ namespace System.Buffers
 
             if (log.IsEnabled())
             {
-                int bufferId = buffer.GetHashCode();
-                log.BufferRented(bufferId, buffer.Length, Id, ArrayPoolEventSource.NoBucketId);
-                log.BufferAllocated(bufferId, buffer.Length, Id, ArrayPoolEventSource.NoBucketId, index >= _buckets.Length ?
-                    ArrayPoolEventSource.BufferAllocatedReason.OverMaximumSize :
-                    ArrayPoolEventSource.BufferAllocatedReason.PoolExhausted);
+                log.BufferRentedAndAllocated(buffer, Id, ArrayPoolEventSource.NoBucketId, _buckets.Length);
             }
 
             return buffer;

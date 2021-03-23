@@ -9,6 +9,32 @@ namespace System.Buffers
 {
     internal static class Utilities
     {
+        internal static bool TrimBuffers { get; } =
+#if CORECLR
+            // Environment uses ArrayPool, so we have to hit the API directly.
+            CLRConfig.GetBoolValueWithFallbacks("System.Buffers.ArrayPool.TrimShared", "DOTNET_SYSTEM_BUFFERS_ARRAYPOOL_TRIMSHARED", defaultValue: true);
+#else
+            // P/Invokes are different for CoreCLR/RT- for RT we'll not allow enabling/disabling for now.
+            true;
+#endif
+
+        internal static MemoryPressure GetMemoryPressure()
+        {
+            const double HighPressureThreshold = .90;       // Percent of GC memory pressure threshold we consider "high"
+            const double MediumPressureThreshold = .70;     // Percent of GC memory pressure threshold we consider "medium"
+
+            GCMemoryInfo memoryInfo = GC.GetGCMemoryInfo();
+            if (memoryInfo.MemoryLoadBytes >= memoryInfo.HighMemoryLoadThresholdBytes * HighPressureThreshold)
+            {
+                return MemoryPressure.High;
+            }
+            else if (memoryInfo.MemoryLoadBytes >= memoryInfo.HighMemoryLoadThresholdBytes * MediumPressureThreshold)
+            {
+                return MemoryPressure.Medium;
+            }
+            return MemoryPressure.Low;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int SelectBucketIndex(int bufferSize)
         {
@@ -29,5 +55,12 @@ namespace System.Buffers
             Debug.Assert(maxSize >= 0);
             return maxSize;
         }
+    }
+
+    internal enum MemoryPressure
+    {
+        Low,
+        Medium,
+        High
     }
 }

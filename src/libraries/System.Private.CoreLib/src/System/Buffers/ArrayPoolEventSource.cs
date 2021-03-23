@@ -42,6 +42,22 @@ namespace System.Buffers
         // as you can't make a constructor partial.
         private ArrayPoolEventSource(int _) { }
 
+        [NonEvent]
+        internal void BufferRentedAndAllocated(Array buffer, int poolId, int bucketIndex, int numBuckets)
+        {
+            int bufferId = buffer.GetHashCode();
+            BufferRented(bufferId, buffer.Length, poolId, NoBucketId);
+            BufferAllocated(bufferId, buffer.Length, poolId, NoBucketId, bucketIndex >= numBuckets ?
+                BufferAllocatedReason.OverMaximumSize :
+                BufferAllocatedReason.PoolExhausted);
+        }
+
+        [NonEvent]
+        internal void BufferRented(Array buffer, int poolId, int bucketIndex)
+        {
+            BufferRented(buffer.GetHashCode(), buffer.Length, poolId, bucketIndex);
+        }
+
         /// <summary>
         /// Event for when a buffer is rented.  This is invoked once for every successful call to Rent,
         /// regardless of whether a buffer is allocated or a buffer is taken from the pool.  In a
@@ -102,6 +118,18 @@ namespace System.Buffers
             payload[4].DataPointer = ((IntPtr)(&reason));
             payload[4].Reserved = 0;
             WriteEventCore(2, 5, payload);
+        }
+
+        [NonEvent]
+        internal void BufferReturned(Array buffer, int poolId, int bucketIndex, bool haveBucket, bool returned)
+        {
+            BufferReturned(buffer.GetHashCode(), buffer.Length, poolId);
+            if (!(haveBucket & returned))
+            {
+                BufferDropped(buffer.GetHashCode(), buffer.Length, poolId,
+                    haveBucket ? bucketIndex : NoBucketId,
+                    haveBucket ? BufferDroppedReason.Full : BufferDroppedReason.OverMaximumSize);
+            }
         }
 
         /// <summary>
