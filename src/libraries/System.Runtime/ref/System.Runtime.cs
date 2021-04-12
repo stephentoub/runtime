@@ -9460,6 +9460,13 @@ namespace System.Runtime.CompilerServices
         public bool AllInternalsVisible { get { throw null; } set { } }
         public string AssemblyName { get { throw null; } }
     }
+    [System.AttributeUsage(System.AttributeTargets.Parameter, AllowMultiple = true, Inherited = false)]
+    public sealed class InterpolatedBuilderArgumentAttribute : System.Attribute
+    {
+        public InterpolatedBuilderArgumentAttribute(string argument) { }
+        public InterpolatedBuilderArgumentAttribute(params string[] arguments) { }
+        public string[] Arguments { get { throw null; } }
+    }
     public ref struct InterpolatedStringBuilder
     {
         private readonly object _dummy;
