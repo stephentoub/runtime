@@ -3572,6 +3572,8 @@ namespace System
         public static System.String Format(System.String format, object? arg0, object? arg1) { throw null; }
         public static System.String Format(System.String format, object? arg0, object? arg1, object? arg2) { throw null; }
         public static System.String Format(System.String format, params object?[] args) { throw null; }
+        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider")] InterpolatedStringBuilder builder) { throw null; }
+        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider", "scratchBuffer")] InterpolatedStringBuilder builder, System.Span<char> scratchBuffer) { throw null; }
         public System.CharEnumerator GetEnumerator() { throw null; }
         public override int GetHashCode() { throw null; }
         public static int GetHashCode(System.ReadOnlySpan<char> value) { throw null; }

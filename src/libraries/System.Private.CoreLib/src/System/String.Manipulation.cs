@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
@@ -503,6 +504,21 @@ namespace System
             sb.AppendFormatHelper(provider, format, args);
             return sb.ToString();
         }
+
+        /// <summary>Formats the interpolated string uses the specified <see cref="IFormatProvider"/>.</summary>
+        /// <param name="provider">An object that supplies culture-specific formatting information.</param>
+        /// <param name="builder">The interpolated string.</param>
+        /// <returns>The result of the string interpolation.</returns>
+        public static string Format(IFormatProvider? provider, [InterpolatedBuilderArgument("provider")] InterpolatedStringBuilder builder) =>
+            builder.ToString();
+
+        /// <summary>Formats the interpolated string uses the specified <see cref="IFormatProvider"/>.</summary>
+        /// <param name="provider">An object that supplies culture-specific formatting information.</param>
+        /// <param name="builder">The interpolated string.</param>
+        /// <param name="scratchBuffer">A buffer temporarily transferred to the builder for use as part of its formatting.  Contents may be overwritten.</param>
+        /// <returns>The result of the string interpolation.</returns>
+        public static string Format(IFormatProvider? provider, [InterpolatedBuilderArgument("provider", "scratchBuffer")] InterpolatedStringBuilder builder, Span<char> scratchBuffer) =>
+            builder.ToString();
 
         public string Insert(int startIndex, string value)
         {
