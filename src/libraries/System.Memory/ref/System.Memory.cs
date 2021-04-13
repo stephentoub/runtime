@@ -141,6 +141,25 @@ namespace System
         public static System.ReadOnlySpan<T> Trim<T>(this System.ReadOnlySpan<T> span, T trimElement) where T : System.IEquatable<T> { throw null; }
         public static System.Span<T> Trim<T>(this System.Span<T> span, System.ReadOnlySpan<T> trimElements) where T : System.IEquatable<T> { throw null; }
         public static System.Span<T> Trim<T>(this System.Span<T> span, T trimElement) where T : System.IEquatable<T> { throw null; }
+        public static bool TryWrite(this System.Span<char> destination, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("destination")] System.MemoryExtensions.InterpolatedSpanBuilder builder, out int charsWritten) { throw null; }
+        public static bool TryWrite(this System.Span<char> destination, IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("destination", "provider")] System.MemoryExtensions.InterpolatedSpanBuilder builder, out int charsWritten) { throw null; }
+        public ref struct InterpolatedSpanBuilder
+        {
+            private readonly object _dummy;
+            private readonly int _dummyPrimitive;
+            public static InterpolatedSpanBuilder Create(int baseLength, int holeCount, System.Span<char> destination, out bool success) { throw null; }
+            public static InterpolatedSpanBuilder Create(int baseLength, int holeCount, System.Span<char> destination, IFormatProvider? provider, out bool success) { throw null; }
+            public bool TryFormatBaseString(string value) { throw null; }
+            public bool TryFormatInterpolationHole(System.ReadOnlySpan<char> value) { throw null; }
+            public bool TryFormatInterpolationHole(System.ReadOnlySpan<char> value, int alignment = 0, string? format = null) { throw null; }
+            public bool TryFormatInterpolationHole<T>(T value) { throw null; }
+            public bool TryFormatInterpolationHole<T>(T value, string? format) { throw null; }
+            public bool TryFormatInterpolationHole<T>(T value, int alignment) { throw null; }
+            public bool TryFormatInterpolationHole<T>(T value, int alignment, string? format) { throw null; }
+            public bool TryFormatInterpolationHole(object? value, int alignment = 0, string? format = null) { throw null; }
+            public bool TryFormatInterpolationHole(string? value) { throw null; }
+            public bool TryFormatInterpolationHole(string? value, int alignment = 0, string? format = null) { throw null; }
+        }
     }
     public readonly partial struct SequencePosition : System.IEquatable<System.SequencePosition>
     {
