@@ -3572,8 +3572,8 @@ namespace System
         public static System.String Format(System.String format, object? arg0, object? arg1) { throw null; }
         public static System.String Format(System.String format, object? arg0, object? arg1, object? arg2) { throw null; }
         public static System.String Format(System.String format, params object?[] args) { throw null; }
-        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider")] InterpolatedStringBuilder builder) { throw null; }
-        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider", "scratchBuffer")] InterpolatedStringBuilder builder, System.Span<char> scratchBuffer) { throw null; }
+        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider")] System.Runtime.CompilerServices.InterpolatedStringBuilder builder) { throw null; }
+        public static System.String Format(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("provider", "scratchBuffer")] System.Runtime.CompilerServices.InterpolatedStringBuilder builder, System.Span<char> scratchBuffer) { throw null; }
         public System.CharEnumerator GetEnumerator() { throw null; }
         public override int GetHashCode() { throw null; }
         public static int GetHashCode(System.ReadOnlySpan<char> value) { throw null; }
@@ -10950,6 +10950,8 @@ namespace System.Text
         public System.Text.StringBuilder Append(uint value) { throw null; }
         [System.CLSCompliantAttribute(false)]
         public System.Text.StringBuilder Append(ulong value) { throw null; }
+        public System.Text.StringBuilder AppendFormat([System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("this")] InterpolatedAppendFormatBuilder builder) { throw null; }
+        public System.Text.StringBuilder AppendFormat(System.IFormatProvider? provider, [System.Runtime.CompilerServices.InterpolatedBuilderArgumentAttribute("this", "provider")] InterpolatedAppendFormatBuilder builder) { throw null; }
         public System.Text.StringBuilder AppendFormat(System.IFormatProvider? provider, string format, object? arg0) { throw null; }
         public System.Text.StringBuilder AppendFormat(System.IFormatProvider? provider, string format, object? arg0, object? arg1) { throw null; }
         public System.Text.StringBuilder AppendFormat(System.IFormatProvider? provider, string format, object? arg0, object? arg1, object? arg2) { throw null; }
@@ -11012,6 +11014,23 @@ namespace System.Text
             [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
             public System.Text.StringBuilder.ChunkEnumerator GetEnumerator() { throw null; }
             public bool MoveNext() { throw null; }
+        }
+        public struct InterpolatedAppendFormatBuilder
+        {
+            private object _dummy;
+            private int _dummyPrimitive;
+            public static System.Text.StringBuilder.InterpolatedAppendFormatBuilder Create(int baseLength, int holeCount, System.Text.StringBuilder stringBuilder) { throw null; }
+            public static System.Text.StringBuilder.InterpolatedAppendFormatBuilder Create(int baseLength, int holeCount, System.Text.StringBuilder stringBuilder, System.IFormatProvider? provider) { throw null; }
+            public void TryFormatBaseString(string value) { }
+            public void TryFormatInterpolationHole<T>(T value) { }
+            public void TryFormatInterpolationHole<T>(T value, string? format) { }
+            public void TryFormatInterpolationHole<T>(T value, int alignment) { }
+            public void TryFormatInterpolationHole<T>(T value, int alignment, string? format) { }
+            public void TryFormatInterpolationHole(ReadOnlySpan<char> value) { }
+            public void TryFormatInterpolationHole(ReadOnlySpan<char> value, int alignment = 0, string? format = null) { }
+            public void TryFormatInterpolationHole(string? value) { }
+            public void TryFormatInterpolationHole(string? value, int alignment = 0, string? format = null) { }
+            public void TryFormatInterpolationHole(object? value, int alignment = 0, string? format = null) { }
         }
     }
     public partial struct StringRuneEnumerator : System.Collections.Generic.IEnumerable<System.Text.Rune>, System.Collections.Generic.IEnumerator<System.Text.Rune>, System.Collections.IEnumerable, System.Collections.IEnumerator, System.IDisposable

@@ -131,16 +131,23 @@ namespace System.Runtime.CompilerServices
         public override string ToString()
         {
             string result = _chars.Slice(0, _pos).ToString();
+            Dispose();
+            return result;
+        }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void Dispose()
+        {
             char[]? toReturn = _arrayToReturnToPool;
             this = default; // defensive clear
             if (toReturn is not null)
             {
                 ArrayPool<char>.Shared.Return(toReturn);
             }
-
-            return result;
         }
+
+        /// <summary>Gets the current contents of the builder.</summary>
+        internal Span<char> Span => _chars.Slice(0, _pos);
 
         /// <summary>Writes the specified string to the builder.</summary>
         /// <param name="value">The string to write.</param>
