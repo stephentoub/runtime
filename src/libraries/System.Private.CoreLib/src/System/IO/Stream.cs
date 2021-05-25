@@ -3,7 +3,6 @@
 
 using System.Buffers;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -14,19 +13,6 @@ namespace System.IO
     public abstract partial class Stream : MarshalByRefObject, IDisposable, IAsyncDisposable
     {
         public static readonly Stream Null = new NullStream();
-
-        /// <summary>To serialize async operations on streams that don't implement their own.</summary>
-        private protected SemaphoreSlim? _asyncActiveSemaphore;
-
-        [MemberNotNull(nameof(_asyncActiveSemaphore))]
-        private protected SemaphoreSlim EnsureAsyncActiveSemaphoreInitialized() =>
-            // Lazily-initialize _asyncActiveSemaphore.  As we're never accessing the SemaphoreSlim's
-            // WaitHandle, we don't need to worry about Disposing it in the case of a race condition.
-#pragma warning disable CS8774 // We lack a NullIffNull annotation for Volatile.Read
-            Volatile.Read(ref _asyncActiveSemaphore) ??
-#pragma warning restore CS8774
-            Interlocked.CompareExchange(ref _asyncActiveSemaphore, new SemaphoreSlim(1, 1), null) ??
-            _asyncActiveSemaphore;
 
         public abstract bool CanRead { get; }
         public abstract bool CanWrite { get; }
@@ -199,11 +185,9 @@ namespace System.IO
         protected virtual WaitHandle CreateWaitHandle() => new ManualResetEvent(false);
 
         public virtual IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
-            BeginReadInternal(buffer, offset, count, callback, state, serializeAsynchronously: false, apm: true);
+            BeginReadInternal(buffer, offset, count, callback, state);
 
-        internal IAsyncResult BeginReadInternal(
-            byte[] buffer, int offset, int count, AsyncCallback? callback, object? state,
-            bool serializeAsynchronously, bool apm)
+        internal IAsyncResult BeginReadInternal(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
         {
             ValidateBufferArguments(buffer, offset, count);
             if (!CanRead)
@@ -211,63 +195,24 @@ namespace System.IO
                 ThrowHelper.ThrowNotSupportedException_UnreadableStream();
             }
 
-            // To avoid a race with a stream's position pointer & generating race conditions
-            // with internal buffer indexes in our own streams that
-            // don't natively support async IO operations when there are multiple
-            // async requests outstanding, we will block the application's main
-            // thread if it does a second IO request until the first one completes.
-            SemaphoreSlim semaphore = EnsureAsyncActiveSemaphoreInitialized();
-            Task? semaphoreTask = null;
-            if (serializeAsynchronously)
-            {
-                semaphoreTask = semaphore.WaitAsync();
-            }
-            else
-            {
-#pragma warning disable CA1416 // Validate platform compatibility, issue: https://github.com/dotnet/runtime/issues/44543
-                semaphore.Wait();
-#pragma warning restore CA1416
-            }
-
             // Create the task to asynchronously do a Read.  This task serves both
             // as the asynchronous work item and as the IAsyncResult returned to the user.
-            var asyncResult = new ReadWriteTask(true /*isRead*/, apm, delegate
+            var asyncResult = new ReadWriteTask(isRead: true, delegate
             {
                 // The ReadWriteTask stores all of the parameters to pass to Read.
                 // As we're currently inside of it, we can get the current task
                 // and grab the parameters from it.
-                var thisTask = Task.InternalCurrent as ReadWriteTask;
-                Debug.Assert(thisTask != null && thisTask._stream != null,
-                    "Inside ReadWriteTask, InternalCurrent should be the ReadWriteTask, and stream should be set");
+                var thisTask = (ReadWriteTask)Task.InternalCurrent!;
+                Debug.Assert(thisTask._stream != null, "Inside ReadWriteTask, InternalCurrent should be the ReadWriteTask, and stream should be set");
 
-                try
-                {
-                    // Do the Read and return the number of bytes read
-                    return thisTask._stream.Read(thisTask._buffer!, thisTask._offset, thisTask._count);
-                }
-                finally
-                {
-                    // If this implementation is part of Begin/EndXx, then the EndXx method will handle
-                    // finishing the async operation.  However, if this is part of XxAsync, then there won't
-                    // be an end method, and this task is responsible for cleaning up.
-                    if (!thisTask._apm)
-                    {
-                        thisTask._stream.FinishTrackingAsyncOperation(thisTask);
-                    }
-
-                    thisTask.ClearBeginState(); // just to help alleviate some memory pressure
-                }
+                Stream stream = thisTask._stream;
+                byte[] buffer = thisTask._buffer!;
+                thisTask._stream = null; // help alleviate some memory pressure
+                thisTask._buffer = null;
+                return stream.Read(buffer, thisTask._offset, thisTask._count);
             }, state, this, buffer, offset, count, callback);
 
-            // Schedule it
-            if (semaphoreTask != null)
-            {
-                RunReadWriteTaskWhenReady(semaphoreTask, asyncResult);
-            }
-            else
-            {
-                RunReadWriteTask(asyncResult);
-            }
+            RunReadWriteTask(asyncResult);
 
             return asyncResult; // return it
         }
@@ -290,14 +235,8 @@ namespace System.IO
                 ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_WrongAsyncResultOrEndCalledMultiple);
             }
 
-            try
-            {
-                return readTask.GetAwaiter().GetResult(); // block until completion, then get result / propagate any exception
-            }
-            finally
-            {
-                FinishTrackingAsyncOperation(readTask);
-            }
+            readTask._endCalled = true;
+            return readTask.GetAwaiter().GetResult(); // block until completion, then get result / propagate any exception
         }
 
         public Task<int> ReadAsync(byte[] buffer, int offset, int count) => ReadAsync(buffer, offset, count, CancellationToken.None);
@@ -338,7 +277,7 @@ namespace System.IO
             {
                 // If the Stream does not override Begin/EndRead, then we can take an optimized path
                 // that skips an extra layer of tasks / IAsyncResults.
-                return (Task<int>)BeginReadInternal(buffer, offset, count, null, null, serializeAsynchronously: true, apm: false);
+                return (Task<int>)BeginReadInternal(buffer, offset, count, null, null);
             }
 
             // Otherwise, we need to wrap calls to Begin/EndWrite to ensure we use the derived type's functionality.
@@ -356,11 +295,9 @@ namespace System.IO
         }
 
         public virtual IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state) =>
-            BeginWriteInternal(buffer, offset, count, callback, state, serializeAsynchronously: false, apm: true);
+            BeginWriteInternal(buffer, offset, count, callback, state);
 
-        internal IAsyncResult BeginWriteInternal(
-            byte[] buffer, int offset, int count, AsyncCallback? callback, object? state,
-            bool serializeAsynchronously, bool apm)
+        internal IAsyncResult BeginWriteInternal(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
         {
             ValidateBufferArguments(buffer, offset, count);
             if (!CanWrite)
@@ -368,89 +305,27 @@ namespace System.IO
                 ThrowHelper.ThrowNotSupportedException_UnwritableStream();
             }
 
-            // To avoid a race condition with a stream's position pointer & generating conditions
-            // with internal buffer indexes in our own streams that
-            // don't natively support async IO operations when there are multiple
-            // async requests outstanding, we will block the application's main
-            // thread if it does a second IO request until the first one completes.
-            SemaphoreSlim semaphore = EnsureAsyncActiveSemaphoreInitialized();
-            Task? semaphoreTask = null;
-            if (serializeAsynchronously)
-            {
-                semaphoreTask = semaphore.WaitAsync(); // kick off the asynchronous wait, but don't block
-            }
-            else
-            {
-#pragma warning disable CA1416 // Validate platform compatibility, issue: https://github.com/dotnet/runtime/issues/44543
-                semaphore.Wait(); // synchronously wait here
-#pragma warning restore CA1416
-            }
-
             // Create the task to asynchronously do a Write.  This task serves both
             // as the asynchronous work item and as the IAsyncResult returned to the user.
-            var asyncResult = new ReadWriteTask(false /*isRead*/, apm, delegate
+            var asyncResult = new ReadWriteTask(isRead: false, delegate
             {
                 // The ReadWriteTask stores all of the parameters to pass to Write.
                 // As we're currently inside of it, we can get the current task
                 // and grab the parameters from it.
-                var thisTask = Task.InternalCurrent as ReadWriteTask;
-                Debug.Assert(thisTask != null && thisTask._stream != null,
-                    "Inside ReadWriteTask, InternalCurrent should be the ReadWriteTask, and stream should be set");
+                var thisTask = (ReadWriteTask)Task.InternalCurrent!;
+                Debug.Assert(thisTask._stream != null, "Inside ReadWriteTask, InternalCurrent should be the ReadWriteTask, and stream should be set");
 
-                try
-                {
-                    // Do the Write
-                    thisTask._stream.Write(thisTask._buffer!, thisTask._offset, thisTask._count);
-                    return 0; // not used, but signature requires a value be returned
-                }
-                finally
-                {
-                    // If this implementation is part of Begin/EndXx, then the EndXx method will handle
-                    // finishing the async operation.  However, if this is part of XxAsync, then there won't
-                    // be an end method, and this task is responsible for cleaning up.
-                    if (!thisTask._apm)
-                    {
-                        thisTask._stream.FinishTrackingAsyncOperation(thisTask);
-                    }
-
-                    thisTask.ClearBeginState(); // just to help alleviate some memory pressure
-                }
+                Stream stream = thisTask._stream;
+                byte[] buffer = thisTask._buffer!;
+                thisTask._stream = null; // help alleviate some memory pressure
+                thisTask._buffer = null;
+                stream.Write(buffer, thisTask._offset, thisTask._count);
+                return 0; // not used, but signature requires a value be returned
             }, state, this, buffer, offset, count, callback);
 
-            // Schedule it
-            if (semaphoreTask != null)
-            {
-                RunReadWriteTaskWhenReady(semaphoreTask, asyncResult);
-            }
-            else
-            {
-                RunReadWriteTask(asyncResult);
-            }
+            RunReadWriteTask(asyncResult);
 
             return asyncResult; // return it
-        }
-
-        private static void RunReadWriteTaskWhenReady(Task asyncWaiter, ReadWriteTask readWriteTask)
-        {
-            Debug.Assert(readWriteTask != null);
-            Debug.Assert(asyncWaiter != null);
-
-            // If the wait has already completed, run the task.
-            if (asyncWaiter.IsCompleted)
-            {
-                Debug.Assert(asyncWaiter.IsCompletedSuccessfully, "The semaphore wait should always complete successfully.");
-                RunReadWriteTask(readWriteTask);
-            }
-            else  // Otherwise, wait for our turn, and then run the task.
-            {
-                asyncWaiter.ContinueWith(static (t, state) =>
-                {
-                    Debug.Assert(t.IsCompletedSuccessfully, "The semaphore wait should always complete successfully.");
-                    var rwt = (ReadWriteTask)state!;
-                    Debug.Assert(rwt._stream != null, "Validates that this code isn't run a second time.");
-                    RunReadWriteTask(rwt); // RunReadWriteTask(readWriteTask);
-                }, readWriteTask, default, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            }
         }
 
         private static void RunReadWriteTask(ReadWriteTask readWriteTask)
@@ -463,13 +338,6 @@ namespace System.IO
             // a cancellation token, this should be changed to use Start.
             readWriteTask.m_taskScheduler = TaskScheduler.Default;
             readWriteTask.ScheduleAndStart(needsProtection: false);
-        }
-
-        private void FinishTrackingAsyncOperation(ReadWriteTask task)
-        {
-            Debug.Assert(_asyncActiveSemaphore != null, "Must have been initialized in order to get here.");
-            task._endCalled = true;
-            _asyncActiveSemaphore.Release();
         }
 
         public virtual void EndWrite(IAsyncResult asyncResult)
@@ -489,15 +357,9 @@ namespace System.IO
                 ThrowHelper.ThrowInvalidOperationException(ExceptionResource.InvalidOperation_WrongAsyncResultOrEndCalledMultiple);
             }
 
-            try
-            {
-                writeTask.GetAwaiter().GetResult(); // block until completion, then propagate any exceptions
-                Debug.Assert(writeTask.Status == TaskStatus.RanToCompletion);
-            }
-            finally
-            {
-                FinishTrackingAsyncOperation(writeTask);
-            }
+            writeTask._endCalled = true;
+            writeTask.GetAwaiter().GetResult(); // block until completion, then propagate any exceptions
+            Debug.Assert(writeTask.Status == TaskStatus.RanToCompletion);
         }
 
         // Task used by BeginRead / BeginWrite to do Read / Write asynchronously.
@@ -519,7 +381,6 @@ namespace System.IO
         private sealed class ReadWriteTask : Task<int>, ITaskCompletionAction
         {
             internal readonly bool _isRead;
-            internal readonly bool _apm; // true if this is from Begin/EndXx; false if it's from XxAsync
             internal bool _endCalled;
             internal Stream? _stream;
             internal byte[]? _buffer;
@@ -528,15 +389,8 @@ namespace System.IO
             private AsyncCallback? _callback;
             private ExecutionContext? _context;
 
-            internal void ClearBeginState() // Used to allow the args to Read/Write to be made available for GC
-            {
-                _stream = null;
-                _buffer = null;
-            }
-
             public ReadWriteTask(
                 bool isRead,
-                bool apm,
                 Func<object?, int> function, object? state,
                 Stream stream, byte[] buffer, int offset, int count, AsyncCallback? callback) :
                 base(function, state, CancellationToken.None, TaskCreationOptions.DenyChildAttach)
@@ -546,7 +400,6 @@ namespace System.IO
 
                 // Store the arguments
                 _isRead = isRead;
-                _apm = apm;
                 _stream = stream;
                 _buffer = buffer;
                 _offset = offset;
@@ -642,7 +495,7 @@ namespace System.IO
             {
                 // If the Stream does not override Begin/EndWrite, then we can take an optimized path
                 // that skips an extra layer of tasks / IAsyncResults.
-                return (Task)BeginWriteInternal(buffer, offset, count, null, null, serializeAsynchronously: true, apm: false);
+                return (Task)BeginWriteInternal(buffer, offset, count, null, null);
             }
 
             // Otherwise, we need to wrap calls to Begin/EndWrite to ensure we use the derived type's functionality.
@@ -992,14 +845,9 @@ namespace System.IO
                 lock (_stream)
                 {
                     // If the Stream does have its own BeginRead implementation, then we must use that override.
-                    // If it doesn't, then we'll use the base implementation, but we'll make sure that the logic
-                    // which ensures only one asynchronous operation does so with an asynchronous wait rather
-                    // than a synchronous wait.  A synchronous wait will result in a deadlock condition, because
-                    // the EndXx method for the outstanding async operation won't be able to acquire the lock on
-                    // _stream due to this call blocked while holding the lock.
                     return overridesBeginRead ?
                         _stream.BeginRead(buffer, offset, count, callback, state) :
-                        _stream.BeginReadInternal(buffer, offset, count, callback, state, serializeAsynchronously: true, apm: true);
+                        _stream.BeginReadInternal(buffer, offset, count, callback, state);
                 }
 #endif
             }
@@ -1067,14 +915,9 @@ namespace System.IO
                 lock (_stream)
                 {
                     // If the Stream does have its own BeginWrite implementation, then we must use that override.
-                    // If it doesn't, then we'll use the base implementation, but we'll make sure that the logic
-                    // which ensures only one asynchronous operation does so with an asynchronous wait rather
-                    // than a synchronous wait.  A synchronous wait will result in a deadlock condition, because
-                    // the EndXx method for the outstanding async operation won't be able to acquire the lock on
-                    // _stream due to this call blocked while holding the lock.
                     return overridesBeginWrite ?
                         _stream.BeginWrite(buffer, offset, count, callback, state) :
-                        _stream.BeginWriteInternal(buffer, offset, count, callback, state, serializeAsynchronously: true, apm: true);
+                        _stream.BeginWriteInternal(buffer, offset, count, callback, state);
                 }
 #endif
             }

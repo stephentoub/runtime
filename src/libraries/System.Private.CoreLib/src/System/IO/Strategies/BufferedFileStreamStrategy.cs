@@ -23,6 +23,19 @@ namespace System.IO.Strategies
         // The last successful Task returned from ReadAsync (perf optimization for successive reads of the same size)
         private Task<int>? _lastSyncCompletedReadTask;
 
+        /// <summary>To serialize async operations on streams that don't implement their own.</summary>
+        private SemaphoreSlim? _asyncActiveSemaphore;
+
+        [MemberNotNull(nameof(_asyncActiveSemaphore))]
+        private SemaphoreSlim EnsureAsyncActiveSemaphoreInitialized() =>
+            // Lazily-initialize _asyncActiveSemaphore.  As we're never accessing the SemaphoreSlim's
+            // WaitHandle, we don't need to worry about Disposing it in the case of a race condition.
+#pragma warning disable CS8774 // We lack a NullIffNull annotation for Volatile.Read
+            Volatile.Read(ref _asyncActiveSemaphore) ??
+#pragma warning restore CS8774
+            Interlocked.CompareExchange(ref _asyncActiveSemaphore, new SemaphoreSlim(1, 1), null) ??
+            _asyncActiveSemaphore;
+
         internal BufferedFileStreamStrategy(FileStreamStrategy strategy, int bufferSize)
         {
             Debug.Assert(bufferSize > 1, "Buffering must not be enabled for smaller buffer sizes");
