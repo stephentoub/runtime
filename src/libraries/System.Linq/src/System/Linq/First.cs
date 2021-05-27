@@ -2,7 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 
 namespace System.Linq
 {
@@ -47,7 +47,6 @@ namespace System.Linq
             TSource? first = source.TryGetFirst(predicate, out bool found);
             return found ? first! : defaultValue;
         }
-
 
         private static TSource? TryGetFirst<TSource>(this IEnumerable<TSource> source, out bool found)
         {
@@ -97,12 +96,43 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
             }
 
-            foreach (TSource element in source)
+            // For consistency, keep in sync with the special-casing done in Where, such that .First(predicate) doesn't exhibit
+            // worse performance than .Where(predicate).First().
+
+            ReadOnlySpan<TSource> span = default;
+            bool gotSpan = false;
+
+            if (source is TSource[] array)
             {
-                if (predicate(element))
+                span = array;
+                gotSpan = true;
+            }
+            else if (source is List<TSource> list)
+            {
+                span = CollectionsMarshal.AsSpan(list);
+                gotSpan = true;
+            }
+
+            if (gotSpan)
+            {
+                foreach (TSource element in span)
                 {
-                    found = true;
-                    return element;
+                    if (predicate(element))
+                    {
+                        found = true;
+                        return element;
+                    }
+                }
+            }
+            else
+            {
+                foreach (TSource element in source)
+                {
+                    if (predicate(element))
+                    {
+                        found = true;
+                        return element;
+                    }
                 }
             }
 

@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace System.Linq
 {
@@ -57,14 +58,42 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
             }
 
+            // For consistency, keep in sync with the special-casing done in Where, such that .Count(predicate) doesn't exhibit
+            // worse performance than .Where(predicate).Count().
+
             int count = 0;
-            foreach (TSource element in source)
+
+            ReadOnlySpan<TSource> span = default;
+            bool gotSpan = false;
+
+            if (source is TSource[] array)
             {
-                checked
+                span = array;
+                gotSpan = true;
+            }
+            else if (source is List<TSource> list)
+            {
+                span = CollectionsMarshal.AsSpan(list);
+                gotSpan = true;
+            }
+
+            if (gotSpan)
+            {
+                foreach (TSource element in span)
                 {
                     if (predicate(element))
                     {
-                        count++;
+                        checked { count++; }
+                    }
+                }
+            }
+            else
+            {
+                foreach (TSource element in source)
+                {
+                    if (predicate(element))
+                    {
+                        checked { count++; }
                     }
                 }
             }

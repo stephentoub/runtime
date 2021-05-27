@@ -2,7 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 
 namespace System.Linq
 {
@@ -102,22 +102,62 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
             }
 
-            using (IEnumerator<TSource> e = source.GetEnumerator())
+            // For consistency, keep in sync with the special-casing done in Where, such that .Single(predicate) doesn't exhibit
+            // worse performance than .Where(predicate).Single().
+
+            ReadOnlySpan<TSource> span = default;
+            bool gotSpan = false;
+
+            if (source is TSource[] array)
             {
-                while (e.MoveNext())
+                span = array;
+                gotSpan = true;
+            }
+            else if (source is List<TSource> list)
+            {
+                span = CollectionsMarshal.AsSpan(list);
+                gotSpan = true;
+            }
+
+            if (gotSpan)
+            {
+                for (int i = 0; i < span.Length; i++)
                 {
-                    TSource result = e.Current;
-                    if (predicate(result))
+                    if (predicate(span[i]))
                     {
-                        while (e.MoveNext())
+                        foreach (TSource next in span.Slice(i + 1))
                         {
-                            if (predicate(e.Current))
+                            if (predicate(next))
                             {
                                 ThrowHelper.ThrowMoreThanOneMatchException();
                             }
                         }
+
                         found = true;
-                        return result;
+                        return span[i];
+                    }
+                }
+            }
+            else
+            {
+                using (IEnumerator<TSource> e = source.GetEnumerator())
+                {
+                    while (e.MoveNext())
+                    {
+                        TSource result = e.Current;
+                        if (predicate(result))
+                        {
+                            while (e.MoveNext())
+                            {
+                                if (predicate(e.Current))
+                                {
+                                    ThrowHelper.ThrowMoreThanOneMatchException();
+                                }
+                            }
+
+                            found = true;
+                            return result;
+                        }
                     }
                 }
             }

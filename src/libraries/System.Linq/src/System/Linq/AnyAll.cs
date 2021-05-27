@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace System.Linq
 {
@@ -56,11 +57,41 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
             }
 
-            foreach (TSource element in source)
+            // For consistency, keep in sync with the special-casing done in Where, such that .Any(predicate) doesn't exhibit
+            // worse performance than .Where(predicate).Any().
+
+            ReadOnlySpan<TSource> span = default;
+            bool gotSpan = false;
+
+            if (source is TSource[] array)
             {
-                if (predicate(element))
+                span = array;
+                gotSpan = true;
+            }
+            else if (source is List<TSource> list)
+            {
+                span = CollectionsMarshal.AsSpan(list);
+                gotSpan = true;
+            }
+
+            if (gotSpan)
+            {
+                foreach (TSource element in span)
                 {
-                    return true;
+                    if (predicate(element))
+                    {
+                        return true;
+                    }
+                }
+            }
+            else
+            {
+                foreach (TSource element in source)
+                {
+                    if (predicate(element))
+                    {
+                        return true;
+                    }
                 }
             }
 

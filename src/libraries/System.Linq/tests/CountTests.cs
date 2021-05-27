@@ -38,6 +38,7 @@ namespace System.Linq.Tests
             yield return new object[] { new int[] { 5 }, isEvenFunc, 0 };
             yield return new object[] { new int[] { 2, 5, 7, 9, 29, 10 }, isEvenFunc, 2 };
             yield return new object[] { new int[] { 2, 20, 22, 100, 50, 10 }, isEvenFunc, 6 };
+            yield return new object[] { new List<int>(new int[] { 2, 20, 22, 100, 50, 10 }), isEvenFunc, 6 };
 
             yield return new object[] { RepeatedNumberGuaranteedNotCollectionType(0, 0), null, 0 };
             yield return new object[] { RepeatedNumberGuaranteedNotCollectionType(5, 1), null, 1 };
