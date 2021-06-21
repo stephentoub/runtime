@@ -921,6 +921,53 @@ public class TypeWithXmlNodeArrayProperty
     public XmlNode[] CDATA { get; set; }
 }
 
+public struct TypeWithManyProperties
+{
+    public int Value0 { get; set; }
+    public int Value1 { get; set; }
+    public int Value2 { get; set; }
+    public int Value3 { get; set; }
+    public int Value4 { get; set; }
+    public int Value5 { get; set; }
+    public int Value6 { get; set; }
+    public int Value7 { get; set; }
+    public int Value8 { get; set; }
+    public int Value9 { get; set; }
+    public int Value10 { get; set; }
+    public int Value11 { get; set; }
+    public int Value12 { get; set; }
+    public int Value13 { get; set; }
+    public int Value14 { get; set; }
+    public int Value15 { get; set; }
+    public int Value16 { get; set; }
+    public int Value17 { get; set; }
+    public int Value18 { get; set; }
+    public int Value19 { get; set; }
+    public int Value20 { get; set; }
+    public int Value21 { get; set; }
+    public int Value22 { get; set; }
+    public int Value23 { get; set; }
+    public int Value24 { get; set; }
+    public int Value25 { get; set; }
+    public int Value26 { get; set; }
+    public int Value27 { get; set; }
+    public int Value28 { get; set; }
+    public int Value29 { get; set; }
+    public int Value30 { get; set; }
+    public int Value31 { get; set; }
+    public int Value32 { get; set; }
+    public int Value33 { get; set; }
+    public int Value34 { get; set; }
+    public int Value35 { get; set; }
+    public int Value36 { get; set; }
+    public int Value37 { get; set; }
+    public int Value38 { get; set; }
+    public int Value39 { get; set; }
+    public int Value40 { get; set; }
+    public int Value41 { get; set; }
+    public int Value42 { get; set; }
+}
+
 
 public class Animal
 {

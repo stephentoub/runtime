@@ -4980,7 +4980,10 @@ namespace System.Xml.Serialization
 
         private void WriteParamsRead(int length)
         {
-            Writer.Write("bool[] paramsRead = new bool[");
+            const int StackallocLimit = 32;
+            Writer.Write(length <= StackallocLimit ?
+                "Span<bool> paramsRead = stackalloc bool[" :
+                "Span<bool> paramsRead = new bool[");
             Writer.Write(length.ToString(CultureInfo.InvariantCulture));
             Writer.WriteLine("];");
         }

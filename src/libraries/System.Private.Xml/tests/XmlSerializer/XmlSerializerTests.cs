@@ -788,6 +788,21 @@ string.Format(@"<?xml version=""1.0"" encoding=""utf-8""?>
         Assert.True(SimpleType.AreEqual(simpleType2D[1][1], actual.TwoDArrayOfSimpleType[1][1]));
     }
 
+    [Fact]
+    public static void Xml_ManyProperties()
+    {
+        string baseline = "<?xml version=\"1.0\"?><TypeWithManyProperties xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"><Value0>0</Value0><Value1>1</Value1><Value2>2</Value2><Value3>3</Value3><Value4>4</Value4><Value5>5</Value5><Value6>6</Value6><Value7>7</Value7><Value8>8</Value8><Value9>9</Value9><Value10>10</Value10><Value11>11</Value11><Value12>12</Value12><Value13>13</Value13><Value14>14</Value14><Value15>15</Value15><Value16>16</Value16><Value17>17</Value17><Value18>18</Value18><Value19>19</Value19><Value20>20</Value20><Value21>21</Value21><Value22>22</Value22><Value23>23</Value23><Value24>24</Value24><Value25>25</Value25><Value26>26</Value26><Value27>27</Value27><Value28>28</Value28><Value29>29</Value29><Value30>30</Value30><Value31>31</Value31><Value32>32</Value32><Value33>33</Value33><Value34>34</Value34><Value35>35</Value35><Value36>36</Value36><Value37>37</Value37><Value38>38</Value38><Value39>39</Value39><Value40>40</Value40><Value41>41</Value41><Value42>42</Value42></TypeWithManyProperties>";
+
+        object expected = new TypeWithManyProperties();
+        for (int i = 0; i <= 42; i++)
+        {
+            typeof(TypeWithManyProperties).GetProperty("Value" + i).SetValue(expected, i);
+        }
+
+        TypeWithManyProperties actual = SerializeAndDeserialize((TypeWithManyProperties)expected, baseline);
+        Assert.Equal((TypeWithManyProperties)expected, actual);
+    }
+
     private static SimpleType[][] GetObjectwith2DArrayOfSimpleType()
     {
         SimpleType[][] simpleType2D = new SimpleType[2][];
