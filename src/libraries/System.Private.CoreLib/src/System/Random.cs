@@ -212,7 +212,6 @@ namespace System
         [Conditional("DEBUG")]
         private static void AssertInRange(double result)
         {
-            // Avoid calling result.ToString() when the Assert condition is not met
             Debug.Assert(result >= 0.0 && result < 1.0, $"Expected 0.0 <= {result} < 1.0");
         }
 
