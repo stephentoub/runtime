@@ -287,16 +287,11 @@ namespace System.Runtime.CompilerServices
             /// <summary>Thread-local cache of boxes. This currently only ever stores one.</summary>
             [ThreadStatic]
             private static StateMachineBox<TStateMachine>? t_tlsCache;
-            /// <summary>Lock used to protected the shared cache of boxes. 1 == held, 0 == not held.</summary>
-            /// <remarks>The code that uses this assumes a runtime without thread aborts.</remarks>
-            private static int s_cacheLock;
-            /// <summary>Singly-linked list cache of boxes.</summary>
-            private static StateMachineBox<TStateMachine>? s_cache;
             /// <summary>The number of items stored in <see cref="s_cache"/>.</summary>
-            private static int s_cacheSize;
+            private static Internal.PaddedInt32 s_cacheCount;
+            /// <summary>Singly-linked list cache of boxes.</summary>
+            private static StateMachineBox<TStateMachine>?[]? s_cache = new StateMachineBox<TStateMachine>[PoolingAsyncValueTaskMethodBuilder.s_valueTaskPoolingCacheSize];
 
-            /// <summary>If this box is stored in the cache, the next box in the cache.</summary>
-            private StateMachineBox<TStateMachine>? _next;
             /// <summary>The state machine itself.</summary>
             public TStateMachine? StateMachine;
 
@@ -315,28 +310,32 @@ namespace System.Runtime.CompilerServices
                 }
 
                 // Try to acquire the lock to access the cache.  If there's any contention, don't use the cache.
-                if (s_cache is not null && // hot read just to see if there's any point paying for the interlocked
-                    Interlocked.Exchange(ref s_cacheLock, 1) == 0)
+                if (s_cacheCount.Value != 0) // hot read just to see if there's any point paying for the lock
                 {
-                    // If there are any instances cached, take one from the cache stack and use it.
-                    box = s_cache;
-                    if (box is not null)
+                    StateMachineBox<TStateMachine>?[]? cache = Interlocked.Exchange(ref s_cache, null);
+                    if (cache is not null)
                     {
-                        s_cache = box._next;
-                        box._next = null;
-                        s_cacheSize--;
-                        Debug.Assert(s_cacheSize >= 0, "Expected the cache size to be non-negative.");
+                        // If there are any instances cached, take one from the cache stack and use it.
+                        int cacheSize = s_cacheCount.Value;
+                        if (cacheSize != 0)
+                        {
+                            cacheSize--;
+                            box = cache[cacheSize];
+                            cache[cacheSize] = null;
+                            Debug.Assert(box is not null);
 
-                        // Release the lock and return the box.
-                        Volatile.Write(ref s_cacheLock, 0);
-                        return box;
+                            s_cacheCount.Value = cacheSize;
+                            Debug.Assert(s_cacheCount.Value >= 0, "Expected the cache size to be non-negative.");
+
+                            // Release the lock and return the box.
+                            Volatile.Write(ref s_cache, cache);
+                            return box;
+                        }
+
+                        // No objects were cached.  We'll just create a new instance.
+                        // Release the lock.
+                        Volatile.Write(ref s_cache, cache);
                     }
-
-                    // No objects were cached.  We'll just create a new instance.
-                    Debug.Assert(s_cacheSize == 0, "Expected cache size to be 0.");
-
-                    // Release the lock.
-                    Volatile.Write(ref s_cacheLock, 0);
                 }
 
                 // Couldn't quickly get a cached instance, so create a new instance.
@@ -346,8 +345,6 @@ namespace System.Runtime.CompilerServices
             /// <summary>Returns this instance to the cache, or drops it if the cache is full or this instance shouldn't be cached.</summary>
             private void ReturnOrDropBox()
             {
-                Debug.Assert(_next is null, "Expected box to not be part of cached list.");
-
                 // Clear out the state machine and associated context to avoid keeping arbitrary state referenced by
                 // lifted locals.  We want to do this regardless of whether we end up caching the box or not, in case
                 // the caller keeps the box alive for an arbitrary period of time.
@@ -379,19 +376,17 @@ namespace System.Runtime.CompilerServices
                 }
 
                 // Try to acquire the cache lock.  If there's any contention, or if the cache is full, we just throw away the object.
-                if (Interlocked.Exchange(ref s_cacheLock, 1) == 0)
+                StateMachineBox<TStateMachine>?[]? cache = Interlocked.Exchange(ref s_cache, null);
+                if (cache is not null)
                 {
-                    if (s_cacheSize < PoolingAsyncValueTaskMethodBuilder.s_valueTaskPoolingCacheSize)
+                    if (s_cacheCount.Value < PoolingAsyncValueTaskMethodBuilder.s_valueTaskPoolingCacheSize)
                     {
                         // Push the box onto the cache stack for subsequent reuse.
-                        _next = s_cache;
-                        s_cache = this;
-                        s_cacheSize++;
-                        Debug.Assert(s_cacheSize > 0 && s_cacheSize <= PoolingAsyncValueTaskMethodBuilder.s_valueTaskPoolingCacheSize, "Expected cache size to be within bounds.");
+                        cache[s_cacheCount.Value++] = this;
                     }
 
                     // Release the lock.
-                    Volatile.Write(ref s_cacheLock, 0);
+                    Volatile.Write(ref s_cache, cache);
                 }
             }
 

@@ -21,4 +21,10 @@ namespace Internal
     internal struct PaddingFor32
     {
     }
+
+    [StructLayout(LayoutKind.Explicit, Size = 2 * Internal.PaddingHelpers.CACHE_LINE_SIZE)]
+    internal struct PaddedInt32
+    {
+        [FieldOffset(Internal.PaddingHelpers.CACHE_LINE_SIZE)] public int Value;
+    }
 }

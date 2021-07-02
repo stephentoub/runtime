@@ -15,9 +15,9 @@ namespace System.Runtime.CompilerServices
     {
         /// <summary>Maximum number of boxes that are allowed to be cached per state machine type.</summary>
         internal static readonly int s_valueTaskPoolingCacheSize =
-            int.TryParse(Environment.GetEnvironmentVariable("DOTNET_SYSTEM_THREADING_POOLINGASYNCVALUETASKSCACHESIZE"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int result) && result > 0 ?
+            int.TryParse(Environment.GetEnvironmentVariable("DOTNET_SYSTEM_COMPILER_SERVICES_POOLINGASYNCVALUETASK_CACHESIZE"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int result) && result >= 0 ?
                 result :
-                Environment.ProcessorCount * 4; // arbitrary default value
+                Environment.ProcessorCount * 4;
 
         /// <summary>Sentinel object used to indicate that the builder completed synchronously and successfully.</summary>
         private static readonly StateMachineBox s_syncSuccessSentinel = PoolingAsyncValueTaskMethodBuilder<VoidTaskResult>.s_syncSuccessSentinel;

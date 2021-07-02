@@ -188,6 +188,65 @@ namespace System.Collections.Concurrent
             }
         }
 
+        /// <summary>Tries to dequeue an element from the queue.</summary>
+        /// <remarks>
+        /// This is a subset of <see cref="TryDequeue(out T)"/>.  It behaves similarly,
+        /// except that it won't spin: in addition to returning false when the segment
+        /// is empty, it'll also return false if it loses a race to access the data.
+        /// </remarks>
+        internal bool TryDequeueNoSpin([MaybeNullWhen(false)] out T item)
+        {
+            Slot[] slots = _slots;
+
+            // Get the head at which to try to dequeue.
+            int currentHead = Volatile.Read(ref _headAndTail.Head);
+            int slotsIndex = currentHead & _slotsMask;
+
+            // Read the sequence number for the head position.
+            int sequenceNumber = Volatile.Read(ref slots[slotsIndex].SequenceNumber);
+
+            // We can dequeue from this slot if it's been filled by an enqueuer, which
+            // would have left the sequence number at pos+1.
+            int diff = sequenceNumber - (currentHead + 1);
+            if (diff == 0)
+            {
+                // We may be racing with other dequeuers.  Try to reserve the slot by incrementing
+                // the head.  Once we've done that, no one else will be able to read from this slot,
+                // and no enqueuer will be able to read from this slot until we've written the new
+                // sequence number. WARNING: The next few lines are not reliable on a runtime that
+                // supports thread aborts. If a thread abort were to sneak in after the CompareExchange
+                // but before the Volatile.Write, enqueuers trying to enqueue into this slot would
+                // spin indefinitely.  If this implementation is ever used on such a platform, this
+                // if block should be wrapped in a finally / prepared region.
+                if (Interlocked.CompareExchange(ref _headAndTail.Head, currentHead + 1, currentHead) == currentHead)
+                {
+                    // Successfully reserved the slot.  Note that after the above CompareExchange, other threads
+                    // trying to dequeue from this slot will end up spinning until we do the subsequent Write.
+                    item = slots[slotsIndex].Item!;
+                    if (!Volatile.Read(ref _preservedForObservation))
+                    {
+                        // If we're preserving, though, we don't zero out the slot, as we need it for
+                        // enumerations, peeking, ToArray, etc.  And we don't update the sequence number,
+                        // so that an enqueuer will see it as full and be forced to move to a new segment.
+                        if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+                        {
+                            slots[slotsIndex].Item = default;
+                        }
+                        Volatile.Write(ref slots[slotsIndex].SequenceNumber, currentHead + slots.Length);
+                    }
+
+                    return true;
+                }
+
+                // The head was already advanced by another thread. A newer head has already been observed and the next
+                // iteration would make forward progress, so there's no need to spin-wait before trying again.
+            }
+
+            // Empty or we lost the race.
+            item = default;
+            return false;
+        }
+
         /// <summary>Tries to peek at an element from the queue, without removing it.</summary>
         public bool TryPeek([MaybeNullWhen(false)] out T result, bool resultUsed)
         {
@@ -319,6 +378,56 @@ namespace System.Collections.Concurrent
                     // to spin-wait before trying again.
                 }
             }
+        }
+
+        /// <summary>
+        /// Attempts to enqueue the item.  If successful, the item will be stored
+        /// in the queue and true will be returned; otherwise, the item won't be stored, and false
+        /// will be returned.
+        /// </summary>
+        /// <remarks>
+        /// This is a subset of <see cref="TryEnqueue(T)"/>.  It behaves similarly,
+        /// except that it won't spin: in addition to returning false when the segment
+        /// is full, it'll also return false if it loses a race to access the data.
+        /// </remarks>
+        internal bool TryEnqueueNoSpin(T item)
+        {
+            Slot[] slots = _slots;
+
+            // Get the tail at which to try to return.
+            int currentTail = Volatile.Read(ref _headAndTail.Tail);
+            int slotsIndex = currentTail & _slotsMask;
+
+            // Read the sequence number for the tail position.
+            int sequenceNumber = Volatile.Read(ref slots[slotsIndex].SequenceNumber);
+
+            // The slot is empty and ready for us to enqueue into it if its sequence
+            // number matches the slot.
+            int diff = sequenceNumber - currentTail;
+            if (diff == 0)
+            {
+                // We may be racing with other enqueuers.  Try to reserve the slot by incrementing
+                // the tail.  Once we've done that, no one else will be able to write to this slot,
+                // and no dequeuer will be able to read from this slot until we've written the new
+                // sequence number. WARNING: The next few lines are not reliable on a runtime that
+                // supports thread aborts. If a thread abort were to sneak in after the CompareExchange
+                // but before the Volatile.Write, other threads will spin trying to access this slot.
+                // If this implementation is ever used on such a platform, this if block should be
+                // wrapped in a finally / prepared region.
+                if (Interlocked.CompareExchange(ref _headAndTail.Tail, currentTail + 1, currentTail) == currentTail)
+                {
+                    // Successfully reserved the slot.  Note that after the above CompareExchange, other threads
+                    // trying to return will end up spinning until we do the subsequent Write.
+                    slots[slotsIndex].Item = item;
+                    Volatile.Write(ref slots[slotsIndex].SequenceNumber, currentTail + 1);
+                    return true;
+                }
+
+                // The tail was already advanced by another thread. A newer tail has already been observed and the next
+                // iteration would make forward progress, so there's no need to spin-wait before trying again.
+            }
+
+            return false;
         }
 
         /// <summary>Represents a slot in the queue.</summary>
