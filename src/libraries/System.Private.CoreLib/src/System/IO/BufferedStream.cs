@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -690,6 +691,7 @@ namespace System.IO
         /// ReadAsync of the underlying _stream rather than calling the base Stream which implements the one in terms of the other.
         /// This allows BufferedStream to affect the semantics of the stream it wraps as little as possible. </summary>
         /// <returns>-2 if _bufferSize was set to 0 while waiting on the semaphore; otherwise num of bytes read.</returns>
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> ReadFromUnderlyingStreamAsync(
             Memory<byte> buffer, CancellationToken cancellationToken, int bytesAlreadySatisfied, Task semaphoreLockTask)
         {

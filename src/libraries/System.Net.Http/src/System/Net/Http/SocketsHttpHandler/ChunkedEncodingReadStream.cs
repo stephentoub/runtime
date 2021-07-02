@@ -4,6 +4,7 @@
 using System.Buffers.Text;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -127,6 +128,7 @@ namespace System.Net.Http
                 return ReadAsyncCore(buffer, cancellationToken);
             }
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             private async ValueTask<int> ReadAsyncCore(Memory<byte> buffer, CancellationToken cancellationToken)
             {
                 // Should only be called if ReadChunksFromConnectionBuffer returned 0.
@@ -427,6 +429,7 @@ namespace System.Net.Http
 
             public override bool NeedsDrain => (_connection != null);
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             public override async ValueTask<bool> DrainAsync(int maxDrainBytes)
             {
                 Debug.Assert(_connection != null);

@@ -5,6 +5,7 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
@@ -493,6 +494,7 @@ namespace System.Net.Security
 
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<ProtocolToken> ReceiveBlobAsync<TIOAdapter>(TIOAdapter adapter)
                  where TIOAdapter : IReadWriteAdapter
         {
@@ -823,6 +825,7 @@ namespace System.Net.Security
         }
 
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> EnsureFullTlsFrameAsync<TIOAdapter>(TIOAdapter adapter)
             where TIOAdapter : IReadWriteAdapter
         {
@@ -916,6 +919,7 @@ namespace System.Net.Security
             return status;
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> ReadAsyncInternal<TIOAdapter>(TIOAdapter adapter, Memory<byte> buffer, bool renegotiation = false)
             where TIOAdapter : IReadWriteAdapter
         {
@@ -1110,6 +1114,7 @@ namespace System.Net.Security
 
             return new ValueTask<int>(minSize);
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             async ValueTask<int> InternalFillHandshakeBufferAsync(TIOAdapter adap,  ValueTask<int> task, int minSize)
             {
                 while (true)
@@ -1131,6 +1136,7 @@ namespace System.Net.Security
             }
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder))]
         private async ValueTask FillBufferAsync<TIOAdapter>(TIOAdapter adapter, int numBytesRequired)
             where TIOAdapter : IReadWriteAdapter
         {

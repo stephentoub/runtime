@@ -13,6 +13,12 @@ namespace System.Runtime.CompilerServices
 {
     /// <summary>Represents a builder for asynchronous methods that returns a <see cref="ValueTask{TResult}"/>.</summary>
     /// <typeparam name="TResult">The type of the result.</typeparam>
+    /// <remarks>
+    /// When an async method returning a <see cref="ValueTask{TResult}"/> completes asynchronously, the <see cref="ValueTask{TResult}"/> needs
+    /// to wrap some object that represents the eventual asynchronous completion. <see cref="AsyncValueTaskMethodBuilder{TResult}"/>
+    /// will create a new object each time, whereas <see cref="PoolingAsyncValueTaskMethodBuilder{TResult}"/> pools those objects and,
+    /// if it's able to find an existing one that's not in use, may reuse an object from a previous operation.
+    /// </remarks>
     [StructLayout(LayoutKind.Auto)]
     public struct PoolingAsyncValueTaskMethodBuilder<TResult>
     {

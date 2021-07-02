@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,6 +55,7 @@ namespace System.Net.Http
                 return bytesRead;
             }
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken)
             {
                 CancellationHelper.ThrowIfCancellationRequested(cancellationToken);
@@ -192,6 +194,7 @@ namespace System.Net.Http
 
             public override bool NeedsDrain => (_connection != null);
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             public override async ValueTask<bool> DrainAsync(int maxDrainBytes)
             {
                 Debug.Assert(_connection != null);

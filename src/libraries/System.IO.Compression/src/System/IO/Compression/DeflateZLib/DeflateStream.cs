@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -395,6 +396,7 @@ namespace System.IO.Compression
 
             return Core(buffer, cancellationToken);
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             async ValueTask<int> Core(Memory<byte> buffer, CancellationToken cancellationToken)
             {
                 AsyncOperationStarting();

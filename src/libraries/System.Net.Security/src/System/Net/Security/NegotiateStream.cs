@@ -341,6 +341,7 @@ namespace System.Net.Security
             return ReadAsync(new AsyncReadWriteAdapter(InnerStream, cancellationToken), buffer);
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> ReadAsync<TAdapter>(TAdapter adapter, Memory<byte> buffer, [CallerMemberName] string? callerName = null) where TAdapter : IReadWriteAdapter
         {
             if (Interlocked.Exchange(ref _readInProgress, 1) == 1)
@@ -421,6 +422,7 @@ namespace System.Net.Security
                 _readInProgress = 0;
             }
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             static async ValueTask<int> ReadAllAsync(TAdapter adapter, Memory<byte> buffer, bool allowZeroRead)
             {
                 int read = 0;

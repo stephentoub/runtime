@@ -3,6 +3,7 @@
 
 using System.IO;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Net.Security;
 using System.Threading.Tasks;
 
@@ -20,6 +21,7 @@ namespace System.Net
         public FrameHeader ReadHeader => _curReadHeader;
         public FrameHeader WriteHeader => _writeHeader;
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         public async ValueTask<byte[]?> ReadMessageAsync<TAdapter>(TAdapter adapter) where TAdapter : IReadWriteAdapter
         {
             if (_eof)

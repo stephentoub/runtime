@@ -200,6 +200,7 @@ namespace System.Net.Http
             // If the read-ahead task is completed, then we've received either EOF or erroneous data the connection, so it's not usable.
             return !_readAheadTask.Value.IsCompleted;
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             async ValueTask<int> ReadAheadWithZeroByteReadAsync()
             {
                 Debug.Assert(_readAheadTask is null);
@@ -1454,6 +1455,7 @@ namespace System.Net.Http
             return true;
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<ReadOnlyMemory<byte>> ReadNextResponseHeaderLineAsync(bool async, bool foldedHeadersAllowed = false)
         {
             int previouslyScannedBytes = 0;
@@ -1658,6 +1660,7 @@ namespace System.Net.Http
             return count;
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> ReadAsync(Memory<byte> destination)
         {
             // This is called when reading the response body.
@@ -1733,6 +1736,7 @@ namespace System.Net.Http
                 ReadBufferedAsyncCore(destination);
         }
 
+        [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
         private async ValueTask<int> ReadBufferedAsyncCore(Memory<byte> destination)
         {
             // This is called when reading the response body.

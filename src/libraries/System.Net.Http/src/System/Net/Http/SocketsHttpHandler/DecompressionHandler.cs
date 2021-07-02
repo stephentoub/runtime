@@ -162,6 +162,7 @@ namespace System.Net.Http
             protected override Task<Stream> CreateContentReadStreamAsync(CancellationToken cancellationToken) =>
                 CreateContentReadStreamAsyncCore(async: true, cancellationToken).AsTask();
 
+            [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
             private async ValueTask<Stream> CreateContentReadStreamAsyncCore(bool async, CancellationToken cancellationToken)
             {
                 if (_contentConsumed)

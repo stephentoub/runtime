@@ -10,6 +10,12 @@ using StateMachineBox = System.Runtime.CompilerServices.PoolingAsyncValueTaskMet
 namespace System.Runtime.CompilerServices
 {
     /// <summary>Represents a builder for asynchronous methods that return a <see cref="ValueTask"/>.</summary>
+    /// <remarks>
+    /// When an async method returning a <see cref="ValueTask"/> completes asynchronously, the <see cref="ValueTask"/> needs
+    /// to wrap some object that represents the eventual asynchronous completion. <see cref="AsyncValueTaskMethodBuilder"/>
+    /// will create a new object each time, whereas <see cref="PoolingAsyncValueTaskMethodBuilder"/> pools those objects and,
+    /// if it's able to find an existing one that's not in use, may reuse an object from a previous operation.
+    /// </remarks>
     [StructLayout(LayoutKind.Auto)]
     public struct PoolingAsyncValueTaskMethodBuilder
     {
