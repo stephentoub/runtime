@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Strategies;
+using System.Threading;
 
 namespace Microsoft.Win32.SafeHandles
 {
@@ -12,6 +13,8 @@ namespace Microsoft.Win32.SafeHandles
     {
         // not using bool? as it's not thread safe
         private volatile NullableBool _canSeek = NullableBool.Undefined;
+        private string? _path;
+        private bool _deleteOnClose;
 
         public SafeFileHandle() : this(ownsHandle: true)
         {
@@ -25,7 +28,42 @@ namespace Microsoft.Win32.SafeHandles
 
         public bool IsAsync { get; private set; }
 
+        internal bool IsPipe => false;
+
         internal bool CanSeek => !IsClosed && GetCanSeek();
+
+        internal ThreadPoolBoundHandle? ThreadPoolBinding => null;
+
+        internal void EnsureThreadPoolBindingInitialized() { /* nop */ }
+
+        internal static SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
+        {
+            // Translate the arguments into arguments for an open call.
+            Interop.Sys.OpenFlags openFlags = PreOpenConfigurationFromOptions(mode, access, share, options);
+
+            // If the file gets created a new, we'll select the permissions for it.  Most Unix utilities by default use 666 (read and
+            // write for all), so we do the same (even though this doesn't match Windows, where by default it's possible to write out
+            // a file and then execute it). No matter what we choose, it'll be subject to the umask applied by the system, such that the
+            // actual permissions will typically be less than what we select here.
+            const Interop.Sys.Permissions OpenPermissions =
+                Interop.Sys.Permissions.S_IRUSR | Interop.Sys.Permissions.S_IWUSR |
+                Interop.Sys.Permissions.S_IRGRP | Interop.Sys.Permissions.S_IWGRP |
+                Interop.Sys.Permissions.S_IROTH | Interop.Sys.Permissions.S_IWOTH;
+
+            SafeFileHandle safeFileHandle = Open(fullPath, openFlags, (int)OpenPermissions);
+            try
+            {
+                safeFileHandle.Init(fullPath, mode, access, share, options, preallocationSize);
+
+                return safeFileHandle;
+            }
+            catch (Exception)
+            {
+                safeFileHandle.Dispose();
+
+                throw;
+            }
+        }
 
         /// <summary>Opens the specified file with the requested flags and mode.</summary>
         /// <param name="path">The path to the file.</param>
@@ -105,7 +143,19 @@ namespace Microsoft.Win32.SafeHandles
 
         // Each thread will have its own copy. This prevents race conditions if the handle had the last error.
         [ThreadStatic]
-        internal static Interop.ErrorInfo? t_lastCloseErrorInfo;
+        private static Interop.ErrorInfo? t_lastCloseErrorInfo;
+
+        protected override void Dispose(bool disposing)
+        {
+            // Closing the file handle can fail, e.g. due to out of disk space.
+            // Throw these errors as exceptions when disposing.
+            SafeFileHandle.t_lastCloseErrorInfo = null;
+            base.Dispose(disposing);
+            if (disposing && SafeFileHandle.t_lastCloseErrorInfo != null)
+            {
+                throw Interop.GetExceptionForIoErrno(SafeFileHandle.t_lastCloseErrorInfo.GetValueOrDefault(), _path, isDirectory: false);
+            }
+        }
 
         protected override bool ReleaseHandle()
         {
@@ -116,6 +166,16 @@ namespace Microsoft.Win32.SafeHandles
             // try to release the lock before we close the handle. (If it's not locked, there's no behavioral
             // problem trying to unlock it.)
             Interop.Sys.FLock(handle, Interop.Sys.LockOperations.LOCK_UN); // ignore any errors
+
+            // If DeleteOnClose was requested when constructed, delete the file now.
+            // (Unix doesn't directly support DeleteOnClose, so we mimic it here.)
+            if (_deleteOnClose)
+            {
+                // Since we still have the file open, this will end up deleting
+                // it (assuming we're the only link to it) once it's closed, but the
+                // name will be removed immediately.
+                Interop.Sys.Unlink(_path!); // ignore errors; it's valid that the path may no longer exist
+            }
 
             // Close the descriptor. Although close is documented to potentially fail with EINTR, we never want
             // to retry, as the descriptor could actually have been closed, been subsequently reassigned, and
@@ -128,43 +188,7 @@ namespace Microsoft.Win32.SafeHandles
             return result == 0;
         }
 
-        public override bool IsInvalid
-        {
-            get
-            {
-                long h = (long)handle;
-                return h < 0 || h > int.MaxValue;
-            }
-        }
-
-        internal static SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
-        {
-            // Translate the arguments into arguments for an open call.
-            Interop.Sys.OpenFlags openFlags = PreOpenConfigurationFromOptions(mode, access, share, options);
-
-            // If the file gets created a new, we'll select the permissions for it.  Most Unix utilities by default use 666 (read and
-            // write for all), so we do the same (even though this doesn't match Windows, where by default it's possible to write out
-            // a file and then execute it). No matter what we choose, it'll be subject to the umask applied by the system, such that the
-            // actual permissions will typically be less than what we select here.
-            const Interop.Sys.Permissions OpenPermissions =
-                Interop.Sys.Permissions.S_IRUSR | Interop.Sys.Permissions.S_IWUSR |
-                Interop.Sys.Permissions.S_IRGRP | Interop.Sys.Permissions.S_IWGRP |
-                Interop.Sys.Permissions.S_IROTH | Interop.Sys.Permissions.S_IWOTH;
-
-            SafeFileHandle safeFileHandle = Open(fullPath, openFlags, (int)OpenPermissions);
-            try
-            {
-                safeFileHandle.Init(fullPath, mode, access, share, options, preallocationSize);
-
-                return safeFileHandle;
-            }
-            catch (Exception)
-            {
-                safeFileHandle.Dispose();
-
-                throw;
-            }
-        }
+        public override bool IsInvalid => (ulong)(long)handle > int.MaxValue;
 
         /// <summary>Translates the FileMode, FileAccess, and FileOptions values into flags to be passed when opening the file.</summary>
         /// <param name="mode">The FileMode provided to the stream's constructor.</param>
@@ -233,7 +257,9 @@ namespace Microsoft.Win32.SafeHandles
 
         private void Init(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
         {
+            _path = path;
             IsAsync = (options & FileOptions.Asynchronous) != 0;
+            _deleteOnClose = (options & FileOptions.DeleteOnClose) != 0;
 
             // Lock the file if requested via FileShare.  This is only advisory locking. FileShare.None implies an exclusive
             // lock on the file and all other modes use a shared lock.  While this is not as granular as Windows, not mandatory,

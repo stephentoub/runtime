@@ -24,12 +24,14 @@ namespace System.IO
             return status.Size;
         }
 
-        internal static unsafe int ReadAtOffset(SafeFileHandle handle, Span<byte> buffer, long fileOffset)
+        internal static unsafe int ReadAtOffset(SafeFileHandle handle, Span<byte> buffer, long fileOffset, string? path = null)
         {
             fixed (byte* bufPtr = &MemoryMarshal.GetReference(buffer))
             {
-                int result = Interop.Sys.PRead(handle, bufPtr, buffer.Length, fileOffset);
-                FileStreamHelpers.CheckFileCall(result, path: null);
+                int result = fileOffset >= 0 ?
+                    Interop.Sys.PRead(handle, bufPtr, buffer.Length, fileOffset) :
+                    Interop.Sys.Read(handle, bufPtr, buffer.Length);
+                FileStreamHelpers.CheckFileCall(result, path);
                 return result;
             }
         }
@@ -67,20 +69,22 @@ namespace System.IO
             return FileStreamHelpers.CheckFileCall(result, path: null);
         }
 
-        private static ValueTask<int> ReadAtOffsetAsync(SafeFileHandle handle, Memory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
+        internal static ValueTask<int> ReadAtOffsetAsync(SafeFileHandle handle, Memory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
             => ScheduleSyncReadAtOffsetAsync(handle, buffer, fileOffset, cancellationToken);
 
         private static ValueTask<long> ReadScatterAtOffsetAsync(SafeFileHandle handle, IReadOnlyList<Memory<byte>> buffers,
             long fileOffset, CancellationToken cancellationToken)
             => ScheduleSyncReadScatterAtOffsetAsync(handle, buffers, fileOffset, cancellationToken);
 
-        internal static unsafe int WriteAtOffset(SafeFileHandle handle, ReadOnlySpan<byte> buffer, long fileOffset)
+        internal static unsafe int WriteAtOffset(SafeFileHandle handle, ReadOnlySpan<byte> buffer, long fileOffset, string? path = null)
         {
             fixed (byte* bufPtr = &MemoryMarshal.GetReference(buffer))
             {
-                int result = Interop.Sys.PWrite(handle, bufPtr, buffer.Length, fileOffset);
-                FileStreamHelpers.CheckFileCall(result, path: null);
-                return  result;
+                int result = fileOffset >= 0 ?
+                    Interop.Sys.PWrite(handle, bufPtr, buffer.Length, fileOffset) :
+                    Interop.Sys.Write(handle, bufPtr, buffer.Length);
+                FileStreamHelpers.CheckFileCall(result, path);
+                return result;
             }
         }
 
@@ -117,7 +121,7 @@ namespace System.IO
             return FileStreamHelpers.CheckFileCall(result, path: null);
         }
 
-        private static ValueTask<int> WriteAtOffsetAsync(SafeFileHandle handle, ReadOnlyMemory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
+        internal static ValueTask<int> WriteAtOffsetAsync(SafeFileHandle handle, ReadOnlyMemory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
             => ScheduleSyncWriteAtOffsetAsync(handle, buffer, fileOffset, cancellationToken);
 
         private static ValueTask<long> WriteGatherAtOffsetAsync(SafeFileHandle handle, IReadOnlyList<ReadOnlyMemory<byte>> buffers,

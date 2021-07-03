@@ -275,7 +275,7 @@ namespace System.IO.Strategies
 
             if (flushToDisk && CanWrite)
             {
-                FlushOSBuffer();
+                FileStreamHelpers.FlushToDisk(_fileHandle, _path);
             }
         }
 

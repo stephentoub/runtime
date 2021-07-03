@@ -179,8 +179,6 @@ namespace System.IO.Strategies
             }
         }
 
-        private void FlushOSBuffer() => FileStreamHelpers.FlushToDisk(_fileHandle, _path);
-
         // Returns a task that flushes the internal write buffer
         private Task FlushWriteAsync(CancellationToken cancellationToken)
         {
@@ -1113,7 +1111,7 @@ namespace System.IO.Strategies
             }
         }
 
-        internal override void Lock(long position, long length) => FileStreamHelpers.Lock(_fileHandle, _path, position, length);
+        internal override void Lock(long position, long length) => FileStreamHelpers.Lock(_fileHandle, _path, CanWrite, position, length);
 
         internal override void Unlock(long position, long length) => FileStreamHelpers.Unlock(_fileHandle, _path, position, length);
     }

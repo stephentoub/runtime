@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace System.IO.Strategies
 {
-    internal sealed partial class AsyncWindowsFileStreamStrategy : WindowsFileStreamStrategy
+    internal sealed partial class AsyncWindowsFileStreamStrategy : OSFileStreamStrategy
     {
         internal AsyncWindowsFileStreamStrategy(SafeFileHandle handle, FileAccess access, FileShare share)
             : base(handle, access, share)
@@ -97,8 +97,6 @@ namespace System.IO.Strategies
 
             return SafeFileHandle.OverlappedValueTaskSource.GetIOError(errorCode, _path);
         }
-
-        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask; // no buffering = nothing to flush
 
         public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
         {

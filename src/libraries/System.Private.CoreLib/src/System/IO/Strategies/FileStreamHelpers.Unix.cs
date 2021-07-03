@@ -8,12 +8,11 @@ namespace System.IO.Strategies
     // this type defines a set of stateless FileStream/FileStreamStrategy helper methods
     internal static partial class FileStreamHelpers
     {
-        // in the future we are most probably going to introduce more strategies (io_uring etc)
-        private static FileStreamStrategy ChooseStrategyCore(SafeFileHandle handle, FileAccess access, FileShare share, int bufferSize, bool isAsync)
-            => new Net5CompatFileStreamStrategy(handle, access, bufferSize == 0 ? 1 : bufferSize, isAsync);
+        private static OSFileStreamStrategy ChooseStrategyCore(SafeFileHandle handle, FileAccess access, FileShare share, bool isAsync) =>
+            new UnixFileStreamStrategy(handle, access, share);
 
-        private static FileStreamStrategy ChooseStrategyCore(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
-            => new Net5CompatFileStreamStrategy(path, mode, access, share, bufferSize == 0 ? 1 : bufferSize, options, preallocationSize);
+        private static FileStreamStrategy ChooseStrategyCore(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize) =>
+            new UnixFileStreamStrategy(path, mode, access, share, options, preallocationSize);
 
         internal static long CheckFileCall(long result, string? path, bool ignoreNotSupported = false)
         {
@@ -27,6 +26,54 @@ namespace System.IO.Strategies
             }
 
             return result;
+        }
+
+        internal static void ValidateFileTypeForNonExtendedPaths(SafeFileHandle handle, string originalPath) { /* nop */ }
+
+        internal static long Seek(SafeFileHandle handle, string? path, long offset, SeekOrigin origin, bool closeInvalidHandle = false) =>
+            CheckFileCall(Interop.Sys.LSeek(handle, offset, (Interop.Sys.SeekWhence)(int)origin), path); // SeekOrigin values are the same as Interop.libc.SeekWhence values
+
+        internal static unsafe void SetFileLength(SafeFileHandle handle, string? path, long length) =>
+            CheckFileCall(Interop.Sys.FTruncate(handle, length), path);
+
+        /// <summary>Flushes the file's OS buffer.</summary>
+        internal static void FlushToDisk(SafeFileHandle handle, string? path)
+        {
+            if (Interop.Sys.FSync(handle) < 0)
+            {
+                Interop.ErrorInfo errorInfo = Interop.Sys.GetLastErrorInfo();
+                switch (errorInfo.Error)
+                {
+                    case Interop.Error.EROFS:
+                    case Interop.Error.EINVAL:
+                    case Interop.Error.ENOTSUP:
+                        // Ignore failures for special files that don't support synchronization.
+                        // In such cases there's nothing to flush.
+                        break;
+                    default:
+                        throw Interop.GetExceptionForIoErrno(errorInfo, path, isDirectory: false);
+                }
+            }
+        }
+
+        internal static void Lock(SafeFileHandle handle, string? path, bool canWrite, long position, long length)
+        {
+            if (OperatingSystem.IsOSXLike())
+            {
+                throw new PlatformNotSupportedException(SR.PlatformNotSupported_OSXFileLocking);
+            }
+
+            CheckFileCall(Interop.Sys.LockFileRegion(handle, position, length, canWrite ? Interop.Sys.LockType.F_WRLCK : Interop.Sys.LockType.F_RDLCK), path);
+        }
+
+        internal static void Unlock(SafeFileHandle handle, string? path, long position, long length)
+        {
+            if (OperatingSystem.IsOSXLike())
+            {
+                throw new PlatformNotSupportedException(SR.PlatformNotSupported_OSXFileLocking);
+            }
+
+            CheckFileCall(Interop.Sys.LockFileRegion(handle, position, length, Interop.Sys.LockType.F_UNLCK), path);
         }
     }
 }

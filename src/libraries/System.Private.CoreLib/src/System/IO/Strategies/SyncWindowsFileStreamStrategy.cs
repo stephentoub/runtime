@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace System.IO.Strategies
 {
-    internal sealed class SyncWindowsFileStreamStrategy : WindowsFileStreamStrategy
+    internal sealed class SyncWindowsFileStreamStrategy : OSFileStreamStrategy
     {
         internal SyncWindowsFileStreamStrategy(SafeFileHandle handle, FileAccess access, FileShare share) : base(handle, access, share)
         {
@@ -60,7 +60,5 @@ namespace System.IO.Strategies
                 new ValueTask((Task)BeginWriteInternal(segment.Array!, segment.Offset, segment.Count, null, null, serializeAsynchronously: true, apm: false)) :
                 base.WriteAsync(buffer, cancellationToken);
         }
-
-        public override Task FlushAsync(CancellationToken cancellationToken) => Task.CompletedTask; // no buffering = nothing to flush
     }
 }
