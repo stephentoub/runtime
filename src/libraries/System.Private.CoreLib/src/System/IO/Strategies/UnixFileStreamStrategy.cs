@@ -1,7 +1,8 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics;
+using System.Buffers;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -22,80 +23,73 @@ namespace System.IO.Strategies
 
         internal override bool IsAsync => _fileHandle.IsAsync;
 
-        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-            ReadAsync(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
-
-        public override ValueTask<int> ReadAsync(Memory<byte> destination, CancellationToken cancellationToken)
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            if (!CanRead)
+            ValidateBufferArguments(buffer, offset, count);
+            return ReadAsync(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+        {
+            if (cancellationToken.IsCancellationRequested)
             {
-                ThrowHelper.ThrowNotSupportedException_UnreadableStream();
+                return ValueTask.FromCanceled<int>(cancellationToken);
             }
 
-            long positionBefore = -1;
-            if (CanSeek)
+            if (MemoryMarshal.TryGetArray(buffer, out ArraySegment<byte> segment))
             {
-                long len = Length;
-
-                if (len == 0)
-                {
-                    return Read0LengthFileAsync(destination, cancellationToken);
-                }
-
-                positionBefore = _filePosition;
-                if (positionBefore + destination.Length > len)
-                {
-                    destination = positionBefore <= len ?
-                        destination.Slice(0, (int)(len - positionBefore)) :
-                        default;
-                }
-
-                _filePosition += destination.Length;
+                return new ValueTask<int>((Task<int>)BeginReadInternal(segment.Array!, segment.Offset, segment.Count, null, null, serializeAsynchronously: true, apm: false));
             }
 
-            return RandomAccess.ReadAtOffsetAsync(_fileHandle, destination, positionBefore, cancellationToken);
+            return Core(buffer, cancellationToken);
 
-            ValueTask<int> Read0LengthFileAsync(Memory<byte> destination, CancellationToken cancellationToken)
+            async ValueTask<int> Core(Memory<byte> buffer, CancellationToken cancellationToken)
             {
-                // Some special file systems, e.g. procfs, report files as being regular and seekable
-                // but always return a zero length.  Thus if Length is 0, we can't trust that to mean
-                // we should trim the destination buffer to 0 in order to not advance beyond the end
-                // of the file.  Instead, for this case we fall back to just invoking Read asynchronously,
-                // as it doesn't employ such trimming and instead updates the position after the
-                // read completes.  The primary reason for updating the position before with async
-                // operations is to support concurrently running operations, but doing that would typically
-                // require knowing the length to be able to partition the read, and if you query Length
-                // to determine that, you wouldn't know how big to make each partition.
-
-                return new ValueTask<int>(Task.Factory.StartNew(static state =>
+                byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(buffer.Length);
+                try
                 {
-                    var args = ((UnixFileStreamStrategy thisRef, Memory<byte> destination))state!;
-                    return args.thisRef.Read(args.destination.Span);
-                }, (this, destination), cancellationToken, TaskCreationOptions.DenyChildAttach, TaskScheduler.Default));
+                    int result = await ((Task<int>)BeginReadInternal(rentedBuffer, 0, buffer.Length, null, null, serializeAsynchronously: true, apm: false)).ConfigureAwait(false);
+                    new ReadOnlySpan<byte>(rentedBuffer, 0, result).CopyTo(buffer.Span);
+                    return result;
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+                }
             }
         }
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
             WriteAsync(new ReadOnlyMemory<byte>(buffer, offset, count), cancellationToken).AsTask();
 
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> source, CancellationToken cancellationToken)
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
         {
-            if (!CanWrite)
+            if (cancellationToken.IsCancellationRequested)
             {
-                ThrowHelper.ThrowNotSupportedException_UnwritableStream();
+                return ValueTask.FromCanceled(cancellationToken);
             }
 
-            long positionBefore = -1;
-            if (CanSeek)
+            if (MemoryMarshal.TryGetArray(buffer, out ArraySegment<byte> segment))
             {
-                positionBefore = _filePosition;
-                _filePosition += source.Length;
-                UpdateLengthOnChangePosition();
+                return new ValueTask((Task)BeginWriteInternal(segment.Array!, segment.Offset, segment.Count, null, null, serializeAsynchronously: true, apm: false));
             }
 
-#pragma warning disable CA2012 // The analyzer doesn't know the internal AsValueTask is safe
-            return RandomAccess.WriteAtOffsetAsync(_fileHandle, source, positionBefore, cancellationToken).AsValueTask();
-#pragma warning restore CA2012
+            byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(buffer.Length);
+            buffer.CopyTo(rentedBuffer);
+
+            return Core(rentedBuffer.AsMemory(0, buffer.Length), cancellationToken);
+
+            async ValueTask Core(Memory<byte> buffer, CancellationToken cancellationToken)
+            {
+                try
+                {
+                    await ((Task)BeginWriteInternal(rentedBuffer, 0, buffer.Length, null, null, serializeAsynchronously: true, apm: false)).ConfigureAwait(false);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(rentedBuffer);
+                }
+            }
         }
 
         public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
