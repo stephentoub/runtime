@@ -68,12 +68,7 @@ namespace System.Drawing
 
         public Icon(string fileName, int width, int height) : this()
         {
-            using (FileStream f = new FileStream(fileName, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                Debug.Assert(f != null, "File.OpenRead returned null instead of throwing an exception");
-                _iconData = new byte[(int)f.Length];
-                f.Read(_iconData, 0, _iconData.Length);
-            }
+            _iconData = File.ReadAllBytes(fileName);
 
             Initialize(width, height);
         }

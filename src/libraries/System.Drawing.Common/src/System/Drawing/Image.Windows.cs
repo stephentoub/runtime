@@ -159,11 +159,8 @@ namespace System.Drawing
                     ImageCodecInfo? rawEncoder = RawFormat.FindEncoder();
                     if (rawEncoder != null && rawEncoder.Clsid == g)
                     {
-                        using (FileStream fs = File.OpenWrite(filename))
-                        {
-                            fs.Write(_rawData, 0, _rawData.Length);
-                            saved = true;
-                        }
+                        File.WriteAllBytes(filename, _rawData);
+                        saved = true;
                     }
                 }
 
