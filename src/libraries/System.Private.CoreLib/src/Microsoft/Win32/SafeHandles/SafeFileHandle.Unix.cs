@@ -29,9 +29,14 @@ namespace Microsoft.Win32.SafeHandles
 
         internal bool CanSeek => !IsClosed && GetCanSeek();
 
-        internal bool IsPipe => false;
-
-        internal ThreadPoolBoundHandle? ThreadPoolBinding => null;
+        internal ThreadPoolBoundHandle? ThreadPoolBinding
+        {
+            get
+            {
+                Debug.Fail("Will never be used on Unix");
+                return null;
+            }
+        }
 
         internal void EnsureThreadPoolBindingInitialized() { /* nop */ }
 
