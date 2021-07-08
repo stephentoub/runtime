@@ -618,7 +618,7 @@ namespace System
                 // bufferSize == 1 used to avoid unnecessary buffer in FileStream
                 using (SafeFileHandle sfh = File.OpenHandle(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 {
-                    long fileLength = RandomAccess.GetFileLength(sfh, filePath);
+                    long fileLength = RandomAccess.GetLength(sfh);
                     if (fileLength == rawData.Length)
                     {
                         int index = 0;

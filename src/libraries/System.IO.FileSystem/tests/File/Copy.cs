@@ -2,7 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.IO.Pipes;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace System.IO.Tests
@@ -239,6 +241,50 @@ namespace System.IO.Tests
             Assert.Throws<IOException>(() => Copy(testFileAlternateStream, testFile2));
             Assert.Throws<IOException>(() => Copy(testFileAlternateStream, testFile2 + alternateStream));
         }
+
+        [Theory]
+        [PlatformSpecific(TestPlatforms.Linux)]
+        [InlineData("/proc/cmdline")]
+        [InlineData("/proc/version")]
+        [InlineData("/proc/filesystems")]
+        public void Linux_CopyFromProcfsToFile(string path)
+        {
+            string testFile = GetTestFilePath();
+            File.Copy(path, testFile);
+            Assert.Equal(File.ReadAllText(path), File.ReadAllText(testFile));
+        }
+/*
+        [Fact]
+        [PlatformSpecific(TestPlatforms.Linux)]
+        public async Task Linux_CopyToNamedFileDescriptors()
+        {
+            using AnonymousPipeServerStream server = new AnonymousPipeServerStream(PipeDirection.Out);
+            using AnonymousPipeClientStream client = new AnonymousPipeClientStream(PipeDirection.In, server.ClientSafePipeHandle);
+
+            string testFile = GetTestFilePath();
+            File.WriteAllText(testFile, "Hello");
+
+            Task copy = Task.Run(() =>
+            {
+                File.Copy(testFile, $"/dev/fd/{server.SafePipeHandle.DangerousGetHandle()}");
+            });
+
+            Task<byte[]> read = Task.Run(() =>
+            {
+                var buffer = new byte[5];
+                int totalRead = 0;
+                while (totalRead < buffer.Length)
+                {
+                    int bytesRead = client.Read(buffer.AsSpan(totalRead));
+                    Assert.InRange(bytesRead, 1, buffer.Length - totalRead);
+                    totalRead += bytesRead;
+                }
+                return buffer;
+            });
+
+            await Task.WhenAll(copy, read).WaitAsync(TimeSpan.FromSeconds(10));
+        }
+*/
         #endregion
     }
 
