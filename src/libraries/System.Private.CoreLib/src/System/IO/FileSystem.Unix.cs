@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.IO
 {
@@ -20,10 +21,10 @@ namespace System.IO
             }
 
             // Copy the contents of the file from the source to the destination, creating the destination in the process
-            using (var src = new FileStream(sourceFullPath, FileMode.Open, FileAccess.Read, FileShare.Read, DefaultBufferSize, FileOptions.None))
-            using (var dst = new FileStream(destFullPath, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, DefaultBufferSize, FileOptions.None))
+            using (SafeFileHandle src = File.OpenHandle(sourceFullPath, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.SequentialScan))
+            using (SafeFileHandle dst = File.OpenHandle(destFullPath, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, FileOptions.None))
             {
-                Interop.CheckIo(Interop.Sys.CopyFile(src.SafeFileHandle, dst.SafeFileHandle));
+                Interop.CheckIo(Interop.Sys.CopyFile(src, dst));
             }
         }
 
