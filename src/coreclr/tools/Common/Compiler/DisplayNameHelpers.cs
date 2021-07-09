@@ -130,13 +130,13 @@ namespace ILCompiler
 
             public override Unit AppendName(StringBuilder sb, SignatureMethodVariable type, FormatOptions options)
             {
-                sb.Append("!!" + type.Index);
+                sb.Append($"!!{type.Index}");
                 return default;
             }
 
             public override Unit AppendName(StringBuilder sb, SignatureTypeVariable type, FormatOptions options)
             {
-                sb.Append("!" + type.Index);
+                sb.Append($"!{type.Index}");
                 return default;
             }
 

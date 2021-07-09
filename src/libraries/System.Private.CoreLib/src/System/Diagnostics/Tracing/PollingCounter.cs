@@ -42,7 +42,7 @@ namespace System.Diagnostics.Tracing
             Publish();
         }
 
-        public override string ToString() => $"PollingCounter '{Name}' Count 1 Mean {_lastVal.ToString("n3")}";
+        public override string ToString() => $"PollingCounter '{Name}' Count 1 Mean {_lastVal:n3}";
 
         private readonly Func<double> _metricProvider;
         private double _lastVal;
@@ -71,7 +71,7 @@ namespace System.Diagnostics.Tracing
                 payload.DisplayName = DisplayName ?? "";
                 payload.Count = 1; // NOTE: These dumb-looking statistics is intentional
                 payload.IntervalSec = intervalSec;
-                payload.Series = $"Interval={pollingIntervalMillisec}";  // TODO: This may need to change when we support multi-session
+                payload.Series = string.Create(null, stackalloc char[128], $"Interval={pollingIntervalMillisec}");  // TODO: This may need to change when we support multi-session
                 payload.CounterType = "Mean";
                 payload.Mean = value;
                 payload.Max = value;

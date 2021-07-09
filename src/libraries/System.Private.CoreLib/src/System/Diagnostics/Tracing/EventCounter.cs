@@ -71,7 +71,7 @@ namespace System.Diagnostics.Tracing
             int count = Volatile.Read(ref _count);
             return count == 0 ?
                 $"EventCounter '{Name}' Count 0" :
-                $"EventCounter '{Name}' Count {count} Mean {(_sum / count).ToString("n3")}";
+                $"EventCounter '{Name}' Count {count} Mean {_sum / count:n3}";
         }
 
         #region Statistics Calculation
@@ -122,7 +122,7 @@ namespace System.Diagnostics.Tracing
                 }
                 payload.Min = _min;
                 payload.Max = _max;
-                payload.Series = $"Interval={pollingIntervalMillisec}"; // TODO: This may need to change when we support multi-session
+                payload.Series = string.Create(null, stackalloc char[128], $"Interval={pollingIntervalMillisec}"); // TODO: This may need to change when we support multi-session
                 payload.CounterType = "Mean";
                 payload.Metadata = GetMetadataString();
                 payload.DisplayName = DisplayName ?? "";

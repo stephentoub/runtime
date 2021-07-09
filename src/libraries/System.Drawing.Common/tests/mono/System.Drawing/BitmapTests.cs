@@ -395,7 +395,7 @@ namespace MonoTests.System.Drawing
             StringBuilder sOutput = new StringBuilder(arrInput.Length);
             for (int i = 0; i < arrInput.Length; i++)
             {
-                sOutput.Append(arrInput[i].ToString("X2"));
+                sOutput.Append($"{arrInput[i]:X2}");
             }
             return sOutput.ToString();
         }

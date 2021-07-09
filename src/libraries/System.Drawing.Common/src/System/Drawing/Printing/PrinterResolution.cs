@@ -76,7 +76,7 @@ namespace System.Drawing.Printing
             }
 
 
-            return FormattableString.Invariant($"[PrinterResolution X={X} Y={Y}]");
+            return string.Create(CultureInfo.InvariantCulture, $"[PrinterResolution X={X} Y={Y}]");
         }
     }
 }

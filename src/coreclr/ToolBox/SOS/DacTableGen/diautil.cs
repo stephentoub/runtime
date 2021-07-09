@@ -246,7 +246,7 @@ public class DiaFile
 
         public void NotifyOpenDBG(string dbgPath, int resultCode)
         {
-            Debug.Assert(false, "Unexpected DBG opening: " + dbgPath);
+            Debug.Assert(false, $"Unexpected DBG opening: {dbgPath}");
         }
 
         public void NotifyOpenPDB(string pdbPath, int resultCode)
@@ -641,7 +641,7 @@ public class DiaSymbol
                     UInt32 celt;
                     e.Next(1, out ds, out celt);
 
-                    str.Append("[" + GetBoundString(ds.lowerBound) + ".." + GetBoundString(ds.upperBound) + "]");
+                    str.Append($"[{GetBoundString(ds.lowerBound)}..{GetBoundString(ds.upperBound)}]");
                 }
             }
             catch (Exception)
@@ -663,7 +663,7 @@ public class DiaSymbol
                         UInt32 celt;
                         e.Next(1, out ds, out celt);
 
-                        str.Append("[" + GetTypeString(ds) + "]");
+                        str.Append($"[{GetTypeString(ds)}]");
                     }
                 }
                 catch (Exception)

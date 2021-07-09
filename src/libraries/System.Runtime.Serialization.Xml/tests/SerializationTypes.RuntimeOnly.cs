@@ -2376,7 +2376,7 @@ public class Family
         sb.AppendLine("Family members:");
         foreach (var member in this.Members)
         {
-            sb.AppendLine("  " + member);
+            sb.AppendLine($"  {member}");
         }
 
         return sb.ToString();
@@ -2393,7 +2393,7 @@ public class FamilyForStress
         sb.AppendLine("Family members:");
         foreach (var member in this.Members)
         {
-            sb.AppendLine("  " + member);
+            sb.AppendLine($"  {member}");
         }
 
         return sb.ToString();

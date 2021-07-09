@@ -175,7 +175,7 @@ namespace Internal.IL
                 AppendType(sb, (TypeDesc)obj, false);
             else
             {
-                Debug.Assert(obj is string, "NYI: " + obj.GetType());
+                Debug.Assert(obj is string, $"NYI: {obj.GetType()}");
                 AppendStringLiteral(sb, (string)obj);
             }
         }
