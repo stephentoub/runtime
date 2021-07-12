@@ -30,7 +30,7 @@ namespace Microsoft.Win32.SafeHandles
         {
             private readonly SafeFileHandle _fileHandle;
             private ManualResetValueTaskSourceCore<long> _source;
-            private Operation _operation = Operation.None;
+            private RandomAccess.Operation _operation = RandomAccess.Operation.None;
             private ExecutionContext? _context;
 
             // These fields store the parameters for the operation.
@@ -50,11 +50,19 @@ namespace Microsoft.Win32.SafeHandles
             [Conditional("DEBUG")]
             private void ValidateInvariants()
             {
-                Operation op = _operation;
-                Debug.Assert(op == Operation.None, $"An operation was queued before the previous {op}'s completion.");
+                RandomAccess.Operation op = _operation;
+                Debug.Assert(op == RandomAccess.Operation.None, $"An operation was queued before the previous {op}'s completion.");
             }
 
-            private long GetResultAndRelease(short token)
+            public ValueTaskSourceStatus GetStatus(short token) =>
+                _source.GetStatus(token);
+
+            public void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags) =>
+                _source.OnCompleted(continuation, state, token, flags);
+
+            void IValueTaskSource.GetResult(short token) => GetResult(token);
+            int IValueTaskSource<int>.GetResult(short token) => (int)GetResult(token);
+            public long GetResult(short token)
             {
                 try
                 {
@@ -67,16 +75,9 @@ namespace Microsoft.Win32.SafeHandles
                 }
             }
 
-            public ValueTaskSourceStatus GetStatus(short token) => _source.GetStatus(token);
-            public void OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags) =>
-                _source.OnCompleted(continuation, state, token, flags);
-            int IValueTaskSource<int>.GetResult(short token) => (int) GetResultAndRelease(token);
-            long IValueTaskSource<long>.GetResult(short token) => GetResultAndRelease(token);
-            void IValueTaskSource.GetResult(short token) => GetResultAndRelease(token);
-
             private void ExecuteInternal()
             {
-                Debug.Assert(_operation >= Operation.Read && _operation <= Operation.WriteGather);
+                Debug.Assert(_operation >= RandomAccess.Operation.Read && _operation <= RandomAccess.Operation.WriteGather);
 
                 long result = 0;
                 Exception? exception = null;
@@ -91,20 +92,20 @@ namespace Microsoft.Win32.SafeHandles
                     {
                         switch (_operation)
                         {
-                            case Operation.Read:
+                            case RandomAccess.Operation.Read:
                                 Memory<byte> writableSingleSegment = MemoryMarshal.AsMemory(_singleSegment);
                                 result = RandomAccess.ReadAtOffset(_fileHandle, writableSingleSegment.Span, _fileOffset);
                                 break;
-                            case Operation.Write:
-                                result = RandomAccess.WriteAtOffset(_fileHandle, _singleSegment.Span, _fileOffset);
+                            case RandomAccess.Operation.Write:
+                                RandomAccess.WriteAtOffset(_fileHandle, _singleSegment.Span, _fileOffset);
                                 break;
-                            case Operation.ReadScatter:
+                            case RandomAccess.Operation.ReadScatter:
                                 Debug.Assert(_readScatterBuffers != null);
                                 result = RandomAccess.ReadScatterAtOffset(_fileHandle, _readScatterBuffers, _fileOffset);
                                 break;
-                            case Operation.WriteGather:
+                            case RandomAccess.Operation.WriteGather:
                                 Debug.Assert(_writeGatherBuffers != null);
-                                result = RandomAccess.WriteGatherAtOffset(_fileHandle, _writeGatherBuffers, _fileOffset);
+                                RandomAccess.WriteGatherAtOffset(_fileHandle, _writeGatherBuffers, _fileOffset);
                                 break;
                         }
                     }
@@ -115,7 +116,7 @@ namespace Microsoft.Win32.SafeHandles
                 }
                 finally
                 {
-                    _operation = Operation.None;
+                    _operation = RandomAccess.Operation.None;
                     _context = null;
                     _cancellationToken = default;
                     _singleSegment = default;
@@ -155,7 +156,7 @@ namespace Microsoft.Win32.SafeHandles
             {
                 ValidateInvariants();
 
-                _operation = Operation.Read;
+                _operation = RandomAccess.Operation.Read;
                 _singleSegment = buffer;
                 _fileOffset = fileOffset;
                 _cancellationToken = cancellationToken;
@@ -164,24 +165,24 @@ namespace Microsoft.Win32.SafeHandles
                 return new ValueTask<int>(this, _source.Version);
             }
 
-            public ValueTask<int> QueueWrite(ReadOnlyMemory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
+            public ValueTask QueueWrite(ReadOnlyMemory<byte> buffer, long fileOffset, CancellationToken cancellationToken)
             {
                 ValidateInvariants();
 
-                _operation = Operation.Write;
+                _operation = RandomAccess.Operation.Write;
                 _singleSegment = buffer;
                 _fileOffset = fileOffset;
                 _cancellationToken = cancellationToken;
                 QueueToThreadPool();
 
-                return new ValueTask<int>(this, _source.Version);
+                return new ValueTask(this, _source.Version);
             }
 
             public ValueTask<long> QueueReadScatter(IReadOnlyList<Memory<byte>> buffers, long fileOffset, CancellationToken cancellationToken)
             {
                 ValidateInvariants();
 
-                _operation = Operation.ReadScatter;
+                _operation = RandomAccess.Operation.ReadScatter;
                 _readScatterBuffers = buffers;
                 _fileOffset = fileOffset;
                 _cancellationToken = cancellationToken;
@@ -190,26 +191,17 @@ namespace Microsoft.Win32.SafeHandles
                 return new ValueTask<long>(this, _source.Version);
             }
 
-            public ValueTask<long> QueueWriteGather(IReadOnlyList<ReadOnlyMemory<byte>> buffers, long fileOffset, CancellationToken cancellationToken)
+            public ValueTask QueueWriteGather(IReadOnlyList<ReadOnlyMemory<byte>> buffers, long fileOffset, CancellationToken cancellationToken)
             {
                 ValidateInvariants();
 
-                _operation = Operation.WriteGather;
+                _operation = RandomAccess.Operation.WriteGather;
                 _writeGatherBuffers = buffers;
                 _fileOffset = fileOffset;
                 _cancellationToken = cancellationToken;
                 QueueToThreadPool();
 
-                return new ValueTask<long>(this, _source.Version);
-            }
-
-            private enum Operation : byte
-            {
-                None,
-                Read,
-                Write,
-                ReadScatter,
-                WriteGather
+                return new ValueTask(this, _source.Version);
             }
         }
     }

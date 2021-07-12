@@ -3,9 +3,11 @@
 
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
 
 namespace Microsoft.Win32.SafeHandles
@@ -39,16 +41,20 @@ namespace Microsoft.Win32.SafeHandles
         }
 
         /// <summary>Reusable IValueTaskSource for RandomAccess async operations based on Overlapped I/O.</summary>
-        internal sealed unsafe class OverlappedValueTaskSource : IValueTaskSource<int>, IValueTaskSource
+        internal sealed class OverlappedValueTaskSource : IValueTaskSource<int>, IValueTaskSource
         {
-            internal static readonly IOCompletionCallback s_ioCallback = IOCallback;
+            internal static readonly unsafe IOCompletionCallback s_ioCallback = IOCallback;
 
             internal readonly PreAllocatedOverlapped _preallocatedOverlapped;
             internal readonly SafeFileHandle _fileHandle;
+            internal ReadOnlyMemory<byte> _buffer;
+            internal IReadOnlyList<ReadOnlyMemory<byte>>? _writeBuffers; // only needed to continue write gather operations
+            internal long _fileOffset;
+            internal RandomAccess.Operation _operation;
             internal MemoryHandle _memoryHandle;
             internal ManualResetValueTaskSourceCore<int> _source; // mutable struct; do not make this readonly
-            private NativeOverlapped* _overlapped;
-            private CancellationTokenRegistration _cancellationRegistration;
+            private unsafe NativeOverlapped* _overlapped;
+            internal CancellationTokenRegistration _cancellationRegistration;
             /// <summary>
             /// 0 when the operation hasn't been scheduled, non-zero when either the operation has completed,
             /// in which case its value is a packed combination of the error code and number of bytes, or when
@@ -74,11 +80,15 @@ namespace Microsoft.Win32.SafeHandles
                     ? ThrowHelper.CreateEndOfFileException()
                     : Win32Marshal.GetExceptionForWin32Error(errorCode, path);
 
-            internal NativeOverlapped* PrepareForOperation(ReadOnlyMemory<byte> memory, long fileOffset)
+            internal unsafe NativeOverlapped* PrepareForOperation(RandomAccess.Operation operation, ReadOnlyMemory<byte> buffer, IReadOnlyList<ReadOnlyMemory<byte>>? writeBuffers, long fileOffset)
             {
                 _result = 0;
-                _memoryHandle = memory.Pin();
+                _operation = operation;
+                _buffer = buffer;
+                _writeBuffers = writeBuffers;
+                _memoryHandle = buffer.Pin();
                 _overlapped = _fileHandle.ThreadPoolBinding!.AllocateNativeOverlapped(_preallocatedOverlapped);
+                _fileOffset = fileOffset;
                 _overlapped->OffsetLow = (int)fileOffset;
                 _overlapped->OffsetHigh = (int)(fileOffset >> 32);
                 return _overlapped;
@@ -104,7 +114,7 @@ namespace Microsoft.Win32.SafeHandles
 
             internal short Version => _source.Version;
 
-            internal void RegisterForCancellation(CancellationToken cancellationToken)
+            internal unsafe void RegisterForCancellation(CancellationToken cancellationToken)
             {
                 Debug.Assert(_overlapped != null);
                 if (cancellationToken.CanBeCanceled)
@@ -134,9 +144,11 @@ namespace Microsoft.Win32.SafeHandles
                 }
             }
 
-            internal void ReleaseResources()
+            internal unsafe void ReleaseResources()
             {
                 // Unpin any pinned buffer.
+                _buffer = default;
+                _writeBuffers = null;
                 _memoryHandle.Dispose();
 
                 // Ensure that any cancellation callback has either completed or will never run,
@@ -171,7 +183,7 @@ namespace Microsoft.Win32.SafeHandles
             }
 
             /// <summary>Invoked when the asynchronous operation has completed asynchronously.</summary>
-            private static void IOCallback(uint errorCode, uint numBytes, NativeOverlapped* pOverlapped)
+            private static unsafe void IOCallback(uint errorCode, uint numBytes, NativeOverlapped* pOverlapped)
             {
                 OverlappedValueTaskSource? vts = (OverlappedValueTaskSource?)ThreadPoolBoundHandle.GetNativeOverlappedState(pOverlapped);
                 Debug.Assert(vts is not null);
@@ -189,15 +201,87 @@ namespace Microsoft.Win32.SafeHandles
 
             internal void Complete(uint errorCode, uint numBytes)
             {
+                ReadOnlyMemory<byte> buffer = _buffer;
+                IReadOnlyList<ReadOnlyMemory<byte>>? buffers = _writeBuffers;
                 ReleaseResources();
 
                 switch (errorCode)
                 {
                     case 0:
+                        // Success
+                        switch (_operation)
+                        {
+                            case RandomAccess.Operation.Read:
+                            case RandomAccess.Operation.ReadScatter:
+                            case RandomAccess.Operation.Write when numBytes == 0 || numBytes == buffer.Length:
+                            case RandomAccess.Operation.WriteGather when numBytes == 0 || numBytes == RandomAccess.CountBuffersLength(buffers!):
+                                // Successfully completed a read, or successfully wrote everything needed.
+                                _source.SetResult((int)numBytes);
+                                break;
+
+                            default:
+                                // Successfully completed a write but for fewer bytes than requested be written.
+                                // We need to try again to write the remainder.  This should be exceedingly rare.
+                                Debug.Assert(_operation == RandomAccess.Operation.Write || _operation == RandomAccess.Operation.WriteGather);
+                                _ = ContinuePrematurelyEndingWriteOperation(this, (int)numBytes, _fileOffset + numBytes, buffer, buffers);
+
+                                static async Task ContinuePrematurelyEndingWriteOperation(
+                                    OverlappedValueTaskSource vts, int bytesWritten, long fileOffset,
+                                    ReadOnlyMemory<byte> buffer, IReadOnlyList<ReadOnlyMemory<byte>>? buffers)
+                                {
+                                    // Write the remainder of the data.  We do the simply thing to handle this rare case,
+                                    // and just issue individual writes for each remaining buffer.  We then transfer
+                                    // the result of that operation to the original IValueTaskSource.
+                                    Exception? error = null;
+                                    try
+                                    {
+                                        if (buffers is null)
+                                        {
+                                            Debug.Assert(bytesWritten < buffer.Length);
+                                            await RandomAccess.WriteAtOffsetAsync(vts._fileHandle, buffer.Slice(bytesWritten), fileOffset, vts._cancellationRegistration.Token).ConfigureAwait(false);
+                                        }
+                                        else
+                                        {
+                                            int bufferCount = buffers.Count;
+                                            for (int i = 0; i < bufferCount; i++)
+                                            {
+                                                buffer = buffers[i];
+                                                if (buffer.Length <= bytesWritten)
+                                                {
+                                                    bytesWritten -= buffer.Length;
+                                                    continue;
+                                                }
+
+                                                buffer = buffer.Slice(bytesWritten);
+                                                bytesWritten = 0;
+                                                await RandomAccess.WriteAtOffsetAsync(vts._fileHandle, buffer, fileOffset, vts._cancellationRegistration.Token).ConfigureAwait(false);
+                                                fileOffset += buffer.Length;
+                                            }
+                                        }
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        error = e;
+                                    }
+
+                                    if (error is not null)
+                                    {
+                                        vts._source.SetException(error);
+                                    }
+                                    else
+                                    {
+                                        vts._source.SetResult(0); // actual result value is ignored
+                                    }
+                                }
+                                break;
+                        }
+
+                        break;
+
                     case Interop.Errors.ERROR_BROKEN_PIPE:
                     case Interop.Errors.ERROR_NO_DATA:
                     case Interop.Errors.ERROR_HANDLE_EOF: // logically success with 0 bytes read (read at end of file)
-                        // Success
+                        // Errors that are treated as success rather than failure
                         _source.SetResult((int)numBytes);
                         break;
 
