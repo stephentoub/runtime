@@ -10,8 +10,8 @@
 // =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks.Sources;
 
 namespace System.Threading.Tasks
 {
@@ -56,7 +56,7 @@ namespace System.Threading.Tasks
     /// </remarks>
     [DebuggerTypeProxy(typeof(SystemThreadingTasks_FutureDebugView<>))]
     [DebuggerDisplay("Id = {Id}, Status = {Status}, Method = {DebuggerDisplayMethodDescription}, Result = {DebuggerDisplayResultDescription}")]
-    public class Task<TResult> : Task
+    public class Task<TResult> : Task, IValueTaskSource<TResult>
     {
         /// <summary>A cached task for default(TResult).</summary>
         internal static readonly Task<TResult> s_defaultResultTask = TaskCache.CreateCacheableTask<TResult>(default);
@@ -530,6 +530,18 @@ namespace System.Threading.Tasks
         public new ConfiguredTaskAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext)
         {
             return new ConfiguredTaskAwaitable<TResult>(this, continueOnCapturedContext);
+        }
+
+        ValueTaskSourceStatus IValueTaskSource<TResult>.GetStatus(short token) =>
+            ValueTaskSource_GetStatus();
+
+        void IValueTaskSource<TResult>.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags) =>
+            ValueTaskSource_OnCompleted(continuation, state, flags);
+
+        TResult IValueTaskSource<TResult>.GetResult(short token)
+        {
+            TaskAwaiter.ValidateEnd(this);
+            return ResultOnSuccess;
         }
 
         #endregion

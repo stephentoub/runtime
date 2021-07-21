@@ -16,6 +16,7 @@ using System.Diagnostics.Tracing;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.Versioning;
+using System.Threading.Tasks.Sources;
 using Internal.Runtime.CompilerServices;
 
 namespace System.Threading.Tasks
@@ -114,7 +115,7 @@ namespace System.Threading.Tasks
     /// </remarks>
     [DebuggerTypeProxy(typeof(SystemThreadingTasks_TaskDebugView))]
     [DebuggerDisplay("Id = {Id}, Status = {Status}, Method = {DebuggerDisplayMethodDescription}")]
-    public class Task : IAsyncResult, IDisposable
+    public class Task : IValueTaskSource, IAsyncResult, IDisposable
     {
         [ThreadStatic]
         internal static Task? t_currentTask;  // The currently executing task.
@@ -2436,6 +2437,50 @@ namespace System.Threading.Tasks
         public ConfiguredTaskAwaitable ConfigureAwait(bool continueOnCapturedContext)
         {
             return new ConfiguredTaskAwaitable(this, continueOnCapturedContext);
+        }
+
+        ValueTaskSourceStatus IValueTaskSource.GetStatus(short token) =>
+            ValueTaskSource_GetStatus();
+
+        void IValueTaskSource.OnCompleted(Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags) =>
+            ValueTaskSource_OnCompleted(continuation, state, flags);
+
+        void IValueTaskSource.GetResult(short token) => TaskAwaiter.ValidateEnd(this);
+
+        private protected ValueTaskSourceStatus ValueTaskSource_GetStatus() =>
+            (TaskStateFlags)(m_stateFlags & (int)TaskStateFlags.CompletedMask) switch
+            {
+                TaskStateFlags.RanToCompletion => ValueTaskSourceStatus.Succeeded,
+                TaskStateFlags.Faulted => ValueTaskSourceStatus.Faulted,
+                TaskStateFlags.Canceled => ValueTaskSourceStatus.Canceled,
+                _ => ValueTaskSourceStatus.Pending
+            };
+
+        private protected void ValueTaskSource_OnCompleted(Action<object?> continuation, object? state, ValueTaskSourceOnCompletedFlags flags)
+        {
+            // This should end up being used only rarely, either via direct code use of ValueTask.{Unsafe}OnCompleted, or via
+            // a custom async method builder.  The built-in builders special-case ValueTask and won't end up here.
+            Debug.Assert(!ReferenceEquals(continuation, ThreadPool.s_invokeAsyncStateMachineBox));
+
+            Action? action = null;
+
+            if (ReferenceEquals(continuation, ValueTaskAwaiter.s_invokeActionDelegate))
+            {
+                action = state as Action;
+            }
+
+            if (action is null)
+            {
+                Action<object?> localContinuation = continuation;
+                object? localState = state;
+                action = () => localContinuation(localState);
+            }
+
+            TaskAwaiter.OnCompletedInternal(
+                this,
+                action,
+                (flags & ValueTaskSourceOnCompletedFlags.UseSchedulingContext) != 0,
+                (flags & ValueTaskSourceOnCompletedFlags.FlowExecutionContext) != 0);
         }
 
         /// <summary>

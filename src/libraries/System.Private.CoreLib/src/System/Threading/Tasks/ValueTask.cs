@@ -7,26 +7,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
-using Internal.Runtime.CompilerServices;
 
 namespace System.Threading.Tasks
 {
-    // TYPE SAFETY WARNING:
-    // This code uses Unsafe.As to cast _obj.  This is done in order to minimize the costs associated with
-    // casting _obj to a variety of different types that can be stored in a ValueTask, e.g. Task<TResult>
-    // vs IValueTaskSource<TResult>.  Previous attempts at this were faulty due to using a separate field
-    // to store information about the type of the object in _obj; this is faulty because if the ValueTask
-    // is stored into a field, concurrent read/writes can result in tearing the _obj from the type information
-    // stored in a separate field.  This means we can rely only on the _obj field to determine how to handle
-    // it.  As such, the pattern employed is to copy _obj into a local obj, and then check it for null and
-    // type test against Task/Task<TResult>.  Since the ValueTask can only be constructed with null, Task,
-    // or IValueTaskSource, we can then be confident in knowing that if it doesn't match one of those values,
-    // it must be an IValueTaskSource, and we can use Unsafe.As.  This could be defeated by other unsafe means,
-    // like private reflection or using Unsafe.As manually, but at that point you're already doing things
-    // that can violate type safety; we only care about getting correct behaviors when using "safe" code.
-    // There are still other race conditions in user's code that can result in errors, but such errors don't
-    // cause ValueTask to violate type safety.
-
     /// <summary>Provides an awaitable result of an asynchronous operation.</summary>
     /// <remarks>
     /// <see cref="ValueTask"/> instances are meant to be directly awaited.  To do more complicated operations with them, a <see cref="Task"/>
@@ -60,7 +43,7 @@ namespace System.Threading.Tasks
         private static volatile Task? s_canceledTask;
 
         /// <summary>null if representing a successful synchronous completion, otherwise a <see cref="Task"/> or a <see cref="IValueTaskSource"/>.</summary>
-        internal readonly object? _obj;
+        internal readonly IValueTaskSource? _source;
         /// <summary>Opaque value passed through to the <see cref="IValueTaskSource"/>.</summary>
         internal readonly short _token;
         /// <summary>true to continue on the captured context; otherwise, false.</summary>
@@ -74,12 +57,12 @@ namespace System.Threading.Tasks
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask(Task task)
         {
-            if (task == null)
+            if (task is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.task);
             }
 
-            _obj = task;
+            _source = task;
 
             _continueOnCapturedContext = true;
             _token = 0;
@@ -91,21 +74,21 @@ namespace System.Threading.Tasks
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask(IValueTaskSource source, short token)
         {
-            if (source == null)
+            if (source is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
             }
 
-            _obj = source;
+            _source = source;
             _token = token;
 
             _continueOnCapturedContext = true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ValueTask(object? obj, short token, bool continueOnCapturedContext)
+        private ValueTask(IValueTaskSource? source, short token, bool continueOnCapturedContext)
         {
-            _obj = obj;
+            _source = source;
             _token = token;
             _continueOnCapturedContext = continueOnCapturedContext;
         }
@@ -145,15 +128,14 @@ namespace System.Threading.Tasks
             new ValueTask<TResult>(Task.FromException<TResult>(exception));
 
         /// <summary>Returns the hash code for this instance.</summary>
-        public override int GetHashCode() => _obj?.GetHashCode() ?? 0;
+        public override int GetHashCode() => _source?.GetHashCode() ?? 0;
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="object"/>.</summary>
         public override bool Equals([NotNullWhen(true)] object? obj) =>
-            obj is ValueTask &&
-            Equals((ValueTask)obj);
+            obj is ValueTask vt && Equals(vt);
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="ValueTask"/> value.</summary>
-        public bool Equals(ValueTask other) => _obj == other._obj && _token == other._token;
+        public bool Equals(ValueTask other) => _source == other._source && _token == other._token;
 
         /// <summary>Returns a value indicating whether two <see cref="ValueTask"/> values are equal.</summary>
         public static bool operator ==(ValueTask left, ValueTask right) =>
@@ -172,20 +154,27 @@ namespace System.Threading.Tasks
         /// </remarks>
         public Task AsTask()
         {
-            object? obj = _obj;
-            Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
-            return
-                obj == null ? Task.CompletedTask :
-                obj as Task ??
-                GetTaskForValueTaskSource(Unsafe.As<IValueTaskSource>(obj));
+            IValueTaskSource? source = _source;
+
+            if (source is null)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (source is Task t)
+            {
+                return t;
+            }
+
+            return GetTaskForValueTaskSource(source);
         }
 
         /// <summary>Gets a <see cref="ValueTask"/> that may be used at any point in the future.</summary>
-        public ValueTask Preserve() => _obj == null ? this : new ValueTask(AsTask());
+        public ValueTask Preserve() => _source is null ? this : new ValueTask(AsTask());
 
         /// <summary>Creates a <see cref="Task"/> to represent the <see cref="IValueTaskSource"/>.</summary>
         /// <remarks>
-        /// The <see cref="IValueTaskSource"/> is passed in rather than reading and casting <see cref="_obj"/>
+        /// The <see cref="IValueTaskSource"/> is passed in rather than reading and casting <see cref="_source"/>
         /// so that the caller can pass in an object it's already validated.
         /// </remarks>
         private Task GetTaskForValueTaskSource(IValueTaskSource t)
@@ -290,20 +279,14 @@ namespace System.Threading.Tasks
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
+                IValueTaskSource? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return true;
                 }
 
-                if (obj is Task t)
-                {
-                    return t.IsCompleted;
-                }
-
-                return Unsafe.As<IValueTaskSource>(obj).GetStatus(_token) != ValueTaskSourceStatus.Pending;
+                return source.GetStatus(_token) != ValueTaskSourceStatus.Pending;
             }
         }
 
@@ -313,20 +296,14 @@ namespace System.Threading.Tasks
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
+                IValueTaskSource? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return true;
                 }
 
-                if (obj is Task t)
-                {
-                    return t.IsCompletedSuccessfully;
-                }
-
-                return Unsafe.As<IValueTaskSource>(obj).GetStatus(_token) == ValueTaskSourceStatus.Succeeded;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Succeeded;
             }
         }
 
@@ -335,20 +312,14 @@ namespace System.Threading.Tasks
         {
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
+                IValueTaskSource? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return false;
                 }
 
-                if (obj is Task t)
-                {
-                    return t.IsFaulted;
-                }
-
-                return Unsafe.As<IValueTaskSource>(obj).GetStatus(_token) == ValueTaskSourceStatus.Faulted;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Faulted;
             }
         }
 
@@ -362,20 +333,14 @@ namespace System.Threading.Tasks
         {
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
+                IValueTaskSource? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return false;
                 }
 
-                if (obj is Task t)
-                {
-                    return t.IsCanceled;
-                }
-
-                return Unsafe.As<IValueTaskSource>(obj).GetStatus(_token) == ValueTaskSourceStatus.Canceled;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Canceled;
             }
         }
 
@@ -383,20 +348,7 @@ namespace System.Threading.Tasks
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void ThrowIfCompletedUnsuccessfully()
         {
-            object? obj = _obj;
-            Debug.Assert(obj == null || obj is Task || obj is IValueTaskSource);
-
-            if (obj != null)
-            {
-                if (obj is Task t)
-                {
-                    TaskAwaiter.ValidateEnd(t);
-                }
-                else
-                {
-                    Unsafe.As<IValueTaskSource>(obj).GetResult(_token);
-                }
-            }
+            _source?.GetResult(_token);
         }
 
         /// <summary>Gets an awaiter for this <see cref="ValueTask"/>.</summary>
@@ -408,7 +360,7 @@ namespace System.Threading.Tasks
         /// </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ConfiguredValueTaskAwaitable ConfigureAwait(bool continueOnCapturedContext) =>
-            new ConfiguredValueTaskAwaitable(new ValueTask(_obj, _token, continueOnCapturedContext));
+            new ConfiguredValueTaskAwaitable(new ValueTask(_source, _token, continueOnCapturedContext));
     }
 
     /// <summary>Provides a value type that can represent a synchronously available value or a task object.</summary>
@@ -444,7 +396,7 @@ namespace System.Threading.Tasks
         /// <summary>A task canceled using `new CancellationToken(true)`. Lazily created only when first needed.</summary>
         private static volatile Task<TResult>? s_canceledTask;
         /// <summary>null if <see cref="_result"/> has the result, otherwise a <see cref="Task{TResult}"/> or a <see cref="IValueTaskSource{TResult}"/>.</summary>
-        internal readonly object? _obj;
+        internal readonly IValueTaskSource<TResult>? _source;
         /// <summary>The result to be used if the operation completed successfully synchronously.</summary>
         internal readonly TResult? _result;
         /// <summary>Opaque value passed through to the <see cref="IValueTaskSource{TResult}"/>.</summary>
@@ -463,7 +415,7 @@ namespace System.Threading.Tasks
         {
             _result = result;
 
-            _obj = null;
+            _source = null;
             _continueOnCapturedContext = true;
             _token = 0;
         }
@@ -473,12 +425,12 @@ namespace System.Threading.Tasks
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask(Task<TResult> task)
         {
-            if (task == null)
+            if (task is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.task);
             }
 
-            _obj = task;
+            _source = task;
 
             _result = default;
             _continueOnCapturedContext = true;
@@ -491,12 +443,12 @@ namespace System.Threading.Tasks
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ValueTask(IValueTaskSource<TResult> source, short token)
         {
-            if (source == null)
+            if (source is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
             }
 
-            _obj = source;
+            _source = source;
             _token = token;
 
             _result = default;
@@ -504,14 +456,14 @@ namespace System.Threading.Tasks
         }
 
         /// <summary>Non-verified initialization of the struct to the specified values.</summary>
-        /// <param name="obj">The object.</param>
+        /// <param name="source">The object.</param>
         /// <param name="result">The result.</param>
         /// <param name="token">The token.</param>
         /// <param name="continueOnCapturedContext">true to continue on captured context; otherwise, false.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ValueTask(object? obj, TResult? result, short token, bool continueOnCapturedContext)
+        private ValueTask(IValueTaskSource<TResult>? source, TResult? result, short token, bool continueOnCapturedContext)
         {
-            _obj = obj;
+            _source = source;
             _result = result;
             _token = token;
             _continueOnCapturedContext = continueOnCapturedContext;
@@ -520,20 +472,18 @@ namespace System.Threading.Tasks
 
         /// <summary>Returns the hash code for this instance.</summary>
         public override int GetHashCode() =>
-            _obj != null ? _obj.GetHashCode() :
-            _result != null ? _result.GetHashCode() :
+            _source is not null ? _source.GetHashCode() :
+            _result is not null ? _result.GetHashCode() :
             0;
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="object"/>.</summary>
         public override bool Equals([NotNullWhen(true)] object? obj) =>
-            obj is ValueTask<TResult> &&
-            Equals((ValueTask<TResult>)obj);
+            obj is ValueTask<TResult> vt && Equals(vt);
 
         /// <summary>Returns a value indicating whether this value is equal to a specified <see cref="ValueTask{TResult}"/> value.</summary>
         public bool Equals(ValueTask<TResult> other) =>
-            _obj != null || other._obj != null ?
-                _obj == other._obj && _token == other._token :
-                EqualityComparer<TResult>.Default.Equals(_result, other._result);
+            _source is not null || other._source is not null ? _source == other._source && _token == other._token :
+            EqualityComparer<TResult>.Default.Equals(_result, other._result);
 
         /// <summary>Returns a value indicating whether two <see cref="ValueTask{TResult}"/> values are equal.</summary>
         public static bool operator ==(ValueTask<TResult> left, ValueTask<TResult> right) =>
@@ -552,28 +502,27 @@ namespace System.Threading.Tasks
         /// </remarks>
         public Task<TResult> AsTask()
         {
-            object? obj = _obj;
-            Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+            IValueTaskSource<TResult>? source = _source;
 
-            if (obj == null)
+            if (source is null)
             {
                 return Task.FromResult(_result!);
             }
 
-            if (obj is Task<TResult> t)
+            if (source is Task<TResult> t)
             {
                 return t;
             }
 
-            return GetTaskForValueTaskSource(Unsafe.As<IValueTaskSource<TResult>>(obj));
+            return GetTaskForValueTaskSource(source);
         }
 
         /// <summary>Gets a <see cref="ValueTask{TResult}"/> that may be used at any point in the future.</summary>
-        public ValueTask<TResult> Preserve() => _obj == null ? this : new ValueTask<TResult>(AsTask());
+        public ValueTask<TResult> Preserve() => _source is null ? this : new ValueTask<TResult>(AsTask());
 
         /// <summary>Creates a <see cref="Task{TResult}"/> to represent the <see cref="IValueTaskSource{TResult}"/>.</summary>
         /// <remarks>
-        /// The <see cref="IValueTaskSource{TResult}"/> is passed in rather than reading and casting <see cref="_obj"/>
+        /// The <see cref="IValueTaskSource{TResult}"/> is passed in rather than reading and casting <see cref="_source"/>
         /// so that the caller can pass in an object it's already validated.
         /// </remarks>
         private Task<TResult> GetTaskForValueTaskSource(IValueTaskSource<TResult> t)
@@ -676,20 +625,14 @@ namespace System.Threading.Tasks
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+                IValueTaskSource<TResult>? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return true;
                 }
 
-                if (obj is Task<TResult> t)
-                {
-                    return t.IsCompleted;
-                }
-
-                return Unsafe.As<IValueTaskSource<TResult>>(obj).GetStatus(_token) != ValueTaskSourceStatus.Pending;
+                return source.GetStatus(_token) != ValueTaskSourceStatus.Pending;
             }
         }
 
@@ -699,20 +642,14 @@ namespace System.Threading.Tasks
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+                IValueTaskSource<TResult>? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return true;
                 }
 
-                if (obj is Task<TResult> t)
-                {
-                    return t.IsCompletedSuccessfully;
-                }
-
-                return Unsafe.As<IValueTaskSource<TResult>>(obj).GetStatus(_token) == ValueTaskSourceStatus.Succeeded;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Succeeded;
             }
         }
 
@@ -721,20 +658,14 @@ namespace System.Threading.Tasks
         {
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+                IValueTaskSource<TResult>? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return false;
                 }
 
-                if (obj is Task<TResult> t)
-                {
-                    return t.IsFaulted;
-                }
-
-                return Unsafe.As<IValueTaskSource<TResult>>(obj).GetStatus(_token) == ValueTaskSourceStatus.Faulted;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Faulted;
             }
         }
 
@@ -748,20 +679,14 @@ namespace System.Threading.Tasks
         {
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+                IValueTaskSource<TResult>? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return false;
                 }
 
-                if (obj is Task<TResult> t)
-                {
-                    return t.IsCanceled;
-                }
-
-                return Unsafe.As<IValueTaskSource<TResult>>(obj).GetStatus(_token) == ValueTaskSourceStatus.Canceled;
+                return source.GetStatus(_token) == ValueTaskSourceStatus.Canceled;
             }
         }
 
@@ -772,21 +697,14 @@ namespace System.Threading.Tasks
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                object? obj = _obj;
-                Debug.Assert(obj == null || obj is Task<TResult> || obj is IValueTaskSource<TResult>);
+                IValueTaskSource<TResult>? source = _source;
 
-                if (obj == null)
+                if (source is null)
                 {
                     return _result!;
                 }
 
-                if (obj is Task<TResult> t)
-                {
-                    TaskAwaiter.ValidateEnd(t);
-                    return t.ResultOnSuccess;
-                }
-
-                return Unsafe.As<IValueTaskSource<TResult>>(obj).GetResult(_token);
+                return source.GetResult(_token);
             }
         }
 
@@ -800,7 +718,7 @@ namespace System.Threading.Tasks
         /// </param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ConfiguredValueTaskAwaitable<TResult> ConfigureAwait(bool continueOnCapturedContext) =>
-            new ConfiguredValueTaskAwaitable<TResult>(new ValueTask<TResult>(_obj, _result, _token, continueOnCapturedContext));
+            new ConfiguredValueTaskAwaitable<TResult>(new ValueTask<TResult>(_source, _result, _token, continueOnCapturedContext));
 
         /// <summary>Gets a string-representation of this <see cref="ValueTask{TResult}"/>.</summary>
         public override string? ToString()
@@ -810,7 +728,7 @@ namespace System.Threading.Tasks
                 Debugger.NotifyOfCrossThreadDependency(); // prevent debugger evaluation from invalidating an underling IValueTaskSource<T> unless forced
 
                 TResult result = Result;
-                if (result != null)
+                if (result is not null)
                 {
                     return result.ToString();
                 }

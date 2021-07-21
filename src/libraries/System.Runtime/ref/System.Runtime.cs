@@ -14621,7 +14621,7 @@ namespace System.Threading.Tasks
         public System.Threading.Tasks.TaskScheduler ExclusiveScheduler { get { throw null; } }
         public void Complete() { }
     }
-    public partial class Task : System.IAsyncResult, System.IDisposable
+    public partial class Task : System.Threading.Tasks.Sources.IValueTaskSource, System.IAsyncResult, System.IDisposable
     {
         public Task(System.Action action) { }
         public Task(System.Action action, System.Threading.CancellationToken cancellationToken) { }
@@ -14678,6 +14678,9 @@ namespace System.Threading.Tasks
         public static System.Threading.Tasks.Task<TResult> FromException<TResult>(System.Exception exception) { throw null; }
         public static System.Threading.Tasks.Task<TResult> FromResult<TResult>(TResult result) { throw null; }
         public System.Runtime.CompilerServices.TaskAwaiter GetAwaiter() { throw null; }
+        void System.Threading.Tasks.Sources.IValueTaskSource.GetResult(short token) { }
+        System.Threading.Tasks.Sources.ValueTaskSourceStatus System.Threading.Tasks.Sources.IValueTaskSource.GetStatus(short token) { throw null; }
+        void System.Threading.Tasks.Sources.IValueTaskSource.OnCompleted(System.Action<object?> continuation, object? state, short token, System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags) { }
         public static System.Threading.Tasks.Task Run(System.Action action) { throw null; }
         public static System.Threading.Tasks.Task Run(System.Action action, System.Threading.CancellationToken cancellationToken) { throw null; }
         public static System.Threading.Tasks.Task Run(System.Func<System.Threading.Tasks.Task?> function) { throw null; }
@@ -14975,7 +14978,7 @@ namespace System.Threading.Tasks
         Canceled = 6,
         Faulted = 7,
     }
-    public partial class Task<TResult> : System.Threading.Tasks.Task
+    public partial class Task<TResult> : System.Threading.Tasks.Task, System.Threading.Tasks.Sources.IValueTaskSource<TResult>
     {
         public Task(System.Func<object?, TResult> function, object? state) : base (default(System.Action)) { }
         public Task(System.Func<object?, TResult> function, object? state, System.Threading.CancellationToken cancellationToken) : base (default(System.Action)) { }
@@ -15009,6 +15012,9 @@ namespace System.Threading.Tasks
         public System.Threading.Tasks.Task<TNewResult> ContinueWith<TNewResult>(System.Func<System.Threading.Tasks.Task<TResult>, TNewResult> continuationFunction, System.Threading.Tasks.TaskContinuationOptions continuationOptions) { throw null; }
         public System.Threading.Tasks.Task<TNewResult> ContinueWith<TNewResult>(System.Func<System.Threading.Tasks.Task<TResult>, TNewResult> continuationFunction, System.Threading.Tasks.TaskScheduler scheduler) { throw null; }
         public new System.Runtime.CompilerServices.TaskAwaiter<TResult> GetAwaiter() { throw null; }
+        TResult System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(short token) { throw null; }
+        System.Threading.Tasks.Sources.ValueTaskSourceStatus System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetStatus(short token) { throw null; }
+        void System.Threading.Tasks.Sources.IValueTaskSource<TResult>.OnCompleted(System.Action<object?> continuation, object? state, short token, System.Threading.Tasks.Sources.ValueTaskSourceOnCompletedFlags flags) { }
         public new System.Threading.Tasks.Task<TResult> WaitAsync(System.TimeSpan timeout) { throw null; }
         public new System.Threading.Tasks.Task<TResult> WaitAsync(System.Threading.CancellationToken cancellationToken) { throw null; }
         public new System.Threading.Tasks.Task<TResult> WaitAsync(System.TimeSpan timeout, System.Threading.CancellationToken cancellationToken) { throw null; }
