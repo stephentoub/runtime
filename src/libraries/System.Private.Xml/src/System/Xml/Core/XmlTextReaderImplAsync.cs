@@ -387,8 +387,8 @@ namespace System.Xml
         public override Task<int> ReadContentAsBase64Async(byte[] buffer, int index, int count)
         {
             CheckAsyncCall();
-            // check arguments
             ArgumentNullException.ThrowIfNull(buffer);
+
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -453,8 +453,8 @@ namespace System.Xml
         public override async Task<int> ReadContentAsBinHexAsync(byte[] buffer, int index, int count)
         {
             CheckAsyncCall();
-            // check arguments
             ArgumentNullException.ThrowIfNull(buffer);
+
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -528,8 +528,8 @@ namespace System.Xml
         public override Task<int> ReadElementContentAsBase64Async(byte[] buffer, int index, int count)
         {
             CheckAsyncCall();
-            // check arguments
             ArgumentNullException.ThrowIfNull(buffer);
+
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -594,8 +594,8 @@ namespace System.Xml
         public override async Task<int> ReadElementContentAsBinHexAsync(byte[] buffer, int index, int count)
         {
             CheckAsyncCall();
-            // check arguments
             ArgumentNullException.ThrowIfNull(buffer);
+
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -651,12 +651,13 @@ namespace System.Xml
         public override async Task<int> ReadValueChunkAsync(char[] buffer, int index, int count)
         {
             CheckAsyncCall();
+
             // throw on elements
             if (!XmlReader.HasValueInternal(_curNode.type))
             {
                 throw new InvalidOperationException(SR.Format(SR.Xml_InvalidReadValueChunk, _curNode.type));
             }
-            // check arguments
+
             ArgumentNullException.ThrowIfNull(buffer);
             if (count < 0)
             {

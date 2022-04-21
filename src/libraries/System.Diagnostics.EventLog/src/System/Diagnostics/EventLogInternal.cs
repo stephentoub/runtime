@@ -1348,7 +1348,6 @@ namespace System.Diagnostics
         private void InternalWriteEvent(uint eventID, ushort category, EventLogEntryType type, string[] strings,
                                 byte[] rawData, string currentMachineName)
         {
-            // check arguments
             if (strings == null)
                 strings = Array.Empty<string>();
             if (strings.Length >= 256)

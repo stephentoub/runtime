@@ -100,7 +100,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate input parameters
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count),
                       SR.ArgumentOutOfRange_NeedNonNegNum);
@@ -167,7 +166,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate input parameters
             if (charCount < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount),
                     SR.ArgumentOutOfRange_NeedNonNegNum);
@@ -286,7 +284,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate input parameters
             if (charCount < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount),
                     SR.ArgumentOutOfRange_NeedNonNegNum);

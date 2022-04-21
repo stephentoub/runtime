@@ -1600,7 +1600,6 @@ namespace System.Xml
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            // check arguments
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -1658,7 +1657,6 @@ namespace System.Xml
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            // check arguments
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -1715,7 +1713,6 @@ namespace System.Xml
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            // check arguments
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -1773,7 +1770,6 @@ namespace System.Xml
         {
             ArgumentNullException.ThrowIfNull(buffer);
 
-            // check arguments
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
@@ -1842,8 +1838,9 @@ namespace System.Xml
             {
                 throw new InvalidOperationException(SR.Format(SR.Xml_InvalidReadValueChunk, _curNode.type));
             }
-            // check arguments
+
             ArgumentNullException.ThrowIfNull(buffer);
+
             if (count < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));

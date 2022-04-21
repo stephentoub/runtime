@@ -53,7 +53,6 @@ namespace System.Net.Sockets
         // specified port number.
         public UdpClient(int port, AddressFamily family)
         {
-            // Validate input parameters.
             if (!TcpValidationHelpers.ValidatePortNumber(port))
             {
                 throw new ArgumentOutOfRangeException(nameof(port));
@@ -360,7 +359,6 @@ namespace System.Net.Sockets
 
         public IAsyncResult BeginReceive(AsyncCallback? requestCallback, object? state)
         {
-            // Validate input parameters.
             ThrowIfDisposed();
 
             // Due to the nature of the ReceiveFrom() call and the ref parameter convention,
@@ -411,7 +409,6 @@ namespace System.Net.Sockets
         // Joins a multicast address group.
         public void JoinMulticastGroup(IPAddress multicastAddr)
         {
-            // Validate input parameters.
             ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(multicastAddr);
 
@@ -448,7 +445,6 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            // Validate input parameters.
             if (_family != AddressFamily.InterNetwork)
             {
                 throw new SocketException((int)SocketError.OperationNotSupported);
@@ -467,7 +463,6 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            // Validate input parameters.
             ArgumentNullException.ThrowIfNull(multicastAddr);
 
             if (ifindex < 0)
@@ -517,7 +512,6 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            // Validate input parameters.
             ArgumentNullException.ThrowIfNull(multicastAddr);
 
             // IPv6 Changes: we need to create the correct MulticastOption and
@@ -552,7 +546,6 @@ namespace System.Net.Sockets
         {
             ThrowIfDisposed();
 
-            // Validate input parameters.
             ArgumentNullException.ThrowIfNull(multicastAddr);
 
             if (ifindex < 0)

@@ -421,10 +421,8 @@ namespace System.Threading
         /// disposed.</exception>
         public void RemoveParticipants(int participantCount)
         {
-            // check dispose
             ThrowIfDisposed();
 
-            // Validate input
             if (participantCount < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(participantCount), participantCount,

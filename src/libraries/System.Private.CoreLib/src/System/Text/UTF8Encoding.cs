@@ -128,8 +128,6 @@ namespace System.Text
 
         public override unsafe int GetByteCount(char[] chars, int index, int count)
         {
-            // Validate input parameters
-
             if (chars is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.chars, ExceptionResource.ArgumentNull_Array);
@@ -158,8 +156,6 @@ namespace System.Text
 
         public override unsafe int GetByteCount(string chars)
         {
-            // Validate input parameters
-
             if (chars is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.chars);
@@ -178,8 +174,6 @@ namespace System.Text
         [CLSCompliant(false)]
         public override unsafe int GetByteCount(char* chars, int count)
         {
-            // Validate Parameters
-
             if (chars == null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.chars);
@@ -261,8 +255,6 @@ namespace System.Text
         public override unsafe int GetBytes(string s, int charIndex, int charCount,
                                               byte[] bytes, int byteIndex)
         {
-            // Validate Parameters
-
             if (s is null || bytes is null)
             {
                 ThrowHelper.ThrowArgumentNullException(
@@ -349,8 +341,6 @@ namespace System.Text
         [CLSCompliant(false)]
         public override unsafe int GetBytes(char* chars, int charCount, byte* bytes, int byteCount)
         {
-            // Validate Parameters
-
             if (chars == null || bytes == null)
             {
                 ThrowHelper.ThrowArgumentNullException(
@@ -431,8 +421,6 @@ namespace System.Text
 
         public override unsafe int GetCharCount(byte[] bytes, int index, int count)
         {
-            // Validate Parameters
-
             if (bytes is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.bytes, ExceptionResource.ArgumentNull_Array);
@@ -461,8 +449,6 @@ namespace System.Text
         [CLSCompliant(false)]
         public override unsafe int GetCharCount(byte* bytes, int count)
         {
-            // Validate Parameters
-
             if (bytes == null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.bytes, ExceptionResource.ArgumentNull_Array);
@@ -494,8 +480,6 @@ namespace System.Text
         public override unsafe int GetChars(byte[] bytes, int byteIndex, int byteCount,
                                               char[] chars, int charIndex)
         {
-            // Validate Parameters
-
             if (bytes is null || chars is null)
             {
                 ThrowHelper.ThrowArgumentNullException(
@@ -534,8 +518,6 @@ namespace System.Text
         [CLSCompliant(false)]
         public override unsafe int GetChars(byte* bytes, int byteCount, char* chars, int charCount)
         {
-            // Validate Parameters
-
             if (bytes is null || chars is null)
             {
                 ThrowHelper.ThrowArgumentNullException(
@@ -658,8 +640,6 @@ namespace System.Text
 
         public override unsafe string GetString(byte[] bytes, int index, int count)
         {
-            // Validate Parameters
-
             if (bytes is null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.bytes, ExceptionResource.ArgumentNull_Array);

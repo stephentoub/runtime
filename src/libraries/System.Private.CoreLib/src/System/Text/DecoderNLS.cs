@@ -50,7 +50,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate Parameters
             if (index < 0 || count < 0)
                 throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count),
                     SR.ArgumentOutOfRange_NeedNonNegNum);
@@ -93,7 +92,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate Parameters
             if (byteIndex < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(byteIndex < 0 ? nameof(byteIndex) : nameof(byteCount),
                     SR.ArgumentOutOfRange_NeedNonNegNum);
@@ -177,7 +175,6 @@ namespace System.Text
                                               char* chars, int charCount, bool flush,
                                               out int bytesUsed, out int charsUsed, out bool completed)
         {
-            // Validate input parameters
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 

@@ -94,7 +94,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate input parameters
             if (index < 0 || count < 0)
                 throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -117,7 +116,6 @@ namespace System.Text
 
         public override unsafe int GetByteCount(string s)
         {
-            // Validate input
             if (s == null)
             {
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.s);
@@ -136,7 +134,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate Parameters
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -221,7 +218,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(chars);
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate Parameters
             if (charCount < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -240,7 +236,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate Parameters
             if (index < 0 || count < 0)
                 throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -265,7 +260,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate Parameters
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -283,7 +277,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate Parameters
             if (byteIndex < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(byteIndex < 0 ? nameof(byteIndex) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -315,7 +308,6 @@ namespace System.Text
             ArgumentNullException.ThrowIfNull(bytes);
             ArgumentNullException.ThrowIfNull(chars);
 
-            // Validate Parameters
             if (charCount < 0 || byteCount < 0)
                 throw new ArgumentOutOfRangeException(charCount < 0 ? nameof(charCount) : nameof(byteCount), SR.ArgumentOutOfRange_NeedNonNegNum);
 
@@ -334,7 +326,6 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            // Validate Parameters
             if (index < 0 || count < 0)
                 throw new ArgumentOutOfRangeException(index < 0 ? nameof(index) : nameof(count), SR.ArgumentOutOfRange_NeedNonNegNum);
 

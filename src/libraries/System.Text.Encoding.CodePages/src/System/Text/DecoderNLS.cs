@@ -83,7 +83,6 @@ namespace System.Text
 
         public override unsafe int GetCharCount(byte[] bytes, int index, int count, bool flush)
         {
-            // Validate Parameters
             if (bytes is null)
                 throw new ArgumentNullException(nameof(bytes));
 
@@ -127,7 +126,6 @@ namespace System.Text
         public override unsafe int GetChars(byte[] bytes, int byteIndex, int byteCount,
                                             char[] chars, int charIndex, bool flush)
         {
-            // Validate Parameters
             if (bytes is null)
                 throw new ArgumentNullException(nameof(bytes));
 
@@ -225,7 +223,6 @@ namespace System.Text
                                             char* chars, int charCount, bool flush,
                                             out int bytesUsed, out int charsUsed, out bool completed)
         {
-            // Validate input parameters
             if (bytes is null)
                 throw new ArgumentNullException(nameof(bytes));
 

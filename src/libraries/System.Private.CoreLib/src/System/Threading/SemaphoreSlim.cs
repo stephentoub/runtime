@@ -154,7 +154,6 @@ namespace System.Threading
                     nameof(initialCount), initialCount, SR.SemaphoreSlim_ctor_InitialCountWrong);
             }
 
-            // validate input
             if (maxCount <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, SR.SemaphoreSlim_ctor_MaxCountWrong);
@@ -288,7 +287,6 @@ namespace System.Threading
         {
             CheckDispose();
 
-            // Validate input
             if (millisecondsTimeout < -1)
             {
                 throw new ArgumentOutOfRangeException(
@@ -599,7 +597,6 @@ namespace System.Threading
         {
             CheckDispose();
 
-            // Validate input
             if (millisecondsTimeout < -1)
             {
                 throw new ArgumentOutOfRangeException(
@@ -776,7 +773,6 @@ namespace System.Threading
         {
             CheckDispose();
 
-            // Validate input
             if (releaseCount < 1)
             {
                 throw new ArgumentOutOfRangeException(
