@@ -1,8 +1,10 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -295,37 +297,74 @@ namespace System.Buffers
         private sealed class Partitions
         {
             /// <summary>The partitions.</summary>
-            private readonly Partition[] _partitions;
+            private readonly List<T[]>[] _perCore;
+            /// <summary>Fallback global queue used when an individual partition is exhausted.</summary>
+            private readonly List<T[]> _global;
 
             /// <summary>Initializes the partitions.</summary>
             public Partitions()
             {
-                // Create the partitions.  We create as many as there are processors, limited by our max.
-                var partitions = new Partition[SharedArrayPoolStatics.s_partitionCount];
+                // Create one partition per core.
+                var partitions = new List<T[]>[SharedArrayPoolStatics.s_partitionCount];
                 for (int i = 0; i < partitions.Length; i++)
                 {
-                    partitions[i] = new Partition();
+                    partitions[i] = new List<T[]>(SharedArrayPoolStatics.s_maxArraysPerPartition);
                 }
-                _partitions = partitions;
+                _perCore = partitions;
+
+                // Create a global partition.
+                _global = new List<T[]>(SharedArrayPoolStatics.s_maxArraysInGlobalQueue);
             }
 
             /// <summary>
             /// Try to push the array into any partition with available space, starting with partition associated with the current core.
             /// If all partitions are full, the array will be dropped.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public bool TryPush(T[] array)
             {
-                // Try to push on to the associated partition first.  If that fails,
-                // round-robin through the other partitions.
-                Partition[] partitions = _partitions;
+                // Get the partition for the current core.
                 int index = (int)((uint)Thread.GetCurrentProcessorId() % (uint)SharedArrayPoolStatics.s_partitionCount); // mod by constant in tier 1
-                for (int i = 0; i < partitions.Length; i++)
+                List<T[]> partition = _perCore[index];
+
+                // Try to take a lock on the partition.  Since this is per core, contention should be rare.
+                // If there is contention, it's likely because the partition is currently being trimmed.
+                // Regardless, just skip it if we can't get access.
+                if (Monitor.TryEnter(partition))
                 {
-                    if (partitions[index].TryPush(array)) return true;
-                    if (++index == partitions.Length) index = 0;
+                    try
+                    {
+                        if (partition.Count < SharedArrayPoolStatics.s_maxArraysPerPartition)
+                        {
+                            partition.Add(array);
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(partition);
+                    }
                 }
 
+                // We either couldn't access the local partition or it was full.
+                // Either way, try to push to the global partition. If someone else
+                // currently has it locked, just skip it.
+                if (Monitor.TryEnter(_global))
+                {
+                    try
+                    {
+                        if (_global.Count < SharedArrayPoolStatics.s_maxArraysInGlobalQueue)
+                        {
+                            _global.Add(array);
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_global);
+                    }
+                }
+
+                // Fail to push.
                 return false;
             }
 
@@ -333,172 +372,89 @@ namespace System.Buffers
             /// Try to pop an array from any partition with available arrays, starting with partition associated with the current core.
             /// If all partitions are empty, null is returned.
             /// </summary>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public T[]? TryPop()
             {
-                // Try to pop from the associated partition first.  If that fails, round-robin through the other partitions.
-                T[]? arr;
-                Partition[] partitions = _partitions;
+                // Get the partition for the current core.
                 int index = (int)((uint)Thread.GetCurrentProcessorId() % (uint)SharedArrayPoolStatics.s_partitionCount); // mod by constant in tier 1
-                for (int i = 0; i < partitions.Length; i++)
+                List<T[]> partition = _perCore[index];
+
+                // Try to take a lock on the partition.  Since this is per core, contention should be rare.
+                // If there is contention, it's likely because the partition is currently being trimmed.
+                // If we can't get access, just fail the whole pop operation. (We could try the global queue
+                // even if popping fails, but it's not worth the extra code.)
+                if (Monitor.TryEnter(partition))
                 {
-                    if ((arr = partitions[index].TryPop()) is not null) return arr;
-                    if (++index == partitions.Length) index = 0;
+                    try
+                    {
+                        // If there's anything in the local partition, remove and return it.
+                        if (CollectionsMarshal.TryRemoveLast(partition, out T[] array))
+                        {
+                            return array;
+                        }
+
+                        // Otherwise, try to access the global partition.  We do so while still holding
+                        // the lock on the local partition, because we'd like to minimize further access
+                        // to the global queue, and so if the local partition was empty, we not only
+                        // want to take 1 array from the global partition, we want to transfer some number
+                        // of additional arrays from the global partition to the local one, which requires
+                        // holding both locks.  We never try to acquire a local partition lock while holding
+                        // the global partition lock, but we also don't block in the case of contention, so
+                        // lock inversion wouldn't result in deadlock, anyway.
+                        if (Monitor.TryEnter(_global))
+                        {
+                            try
+                            {
+                                // If there's at least one array in the global partition. Take it.
+                                if (CollectionsMarshal.TryRemoveLast(_global, out array))
+                                {
+                                    int globalCount = _global.Count;
+
+                                    // Now see if we can transfer any additional arrays from the global partition to the local.
+                                    int extra = globalCount / SharedArrayPoolStatics.s_partitionCount;
+                                    if (extra > 0)
+                                    {
+                                        extra = Math.Min(extra, SharedArrayPoolStatics.s_maxArraysPerPartition);
+
+                                        Debug.Assert(partition.Count == 0);
+                                        CollectionsMarshal.SetCount(partition, extra);
+                                        CollectionsMarshal.AsSpan(_global).Slice(globalCount - extra).CopyTo(CollectionsMarshal.AsSpan(partition));
+                                        CollectionsMarshal.SetCount(_global, globalCount - extra);
+                                    }
+
+                                    // Return the array we got.
+                                    return array;
+                                }
+                            }
+                            finally
+                            {
+                                Monitor.Exit(_global);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(partition);
+                    }
                 }
+
                 return null;
             }
 
             public void Trim(int currentMilliseconds, int id, Utilities.MemoryPressure pressure, int bucketSize)
             {
-                Partition[] partitions = _partitions;
-                for (int i = 0; i < partitions.Length; i++)
-                {
-                    partitions[i].Trim(currentMilliseconds, id, pressure, bucketSize);
-                }
-            }
-        }
+                _ = currentMilliseconds;
+                _ = id;
+                _ = pressure;
+                _ = bucketSize;
+                _ = _perCore.Length;
 
-        /// <summary>Provides a simple, bounded stack of arrays, protected by a lock.</summary>
-        private sealed class Partition
-        {
-            /// <summary>The arrays in the partition.</summary>
-            private readonly T[]?[] _arrays = new T[SharedArrayPoolStatics.s_maxArraysPerPartition][];
-            /// <summary>Number of arrays stored in <see cref="_arrays"/>.</summary>
-            private int _count;
-            /// <summary>Timestamp set by Trim when it sees this as 0.</summary>
-            private int _millisecondsTimestamp;
+                // TODO:
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool TryPush(T[] array)
-            {
-                bool enqueued = false;
-                Monitor.Enter(this);
-                T[]?[] arrays = _arrays;
-                int count = _count;
-                if ((uint)count < (uint)arrays.Length)
-                {
-                    if (count == 0)
-                    {
-                        // Reset the time stamp now that we're transitioning from empty to non-empty.
-                        // Trim will see this as 0 and initialize it to the current time when Trim is called.
-                        _millisecondsTimestamp = 0;
-                    }
-
-                    arrays[count] = array;
-                    _count = count + 1;
-                    enqueued = true;
-                }
-                Monitor.Exit(this);
-                return enqueued;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public T[]? TryPop()
-            {
-                T[]? arr = null;
-                Monitor.Enter(this);
-                T[]?[] arrays = _arrays;
-                int count = _count - 1;
-                if ((uint)count < (uint)arrays.Length)
-                {
-                    arr = arrays[count];
-                    arrays[count] = null;
-                    _count = count;
-                }
-                Monitor.Exit(this);
-                return arr;
-            }
-
-            public void Trim(int currentMilliseconds, int id, Utilities.MemoryPressure pressure, int bucketSize)
-            {
-                const int TrimAfterMS = 60 * 1000;                                  // Trim after 60 seconds for low/moderate pressure
-                const int HighTrimAfterMS = 10 * 1000;                              // Trim after 10 seconds for high pressure
-
-                const int LargeBucket = 16384;                                      // If the bucket is larger than this we'll trim an extra when under high pressure
-
-                const int ModerateTypeSize = 16;                                    // If T is larger than this we'll trim an extra when under high pressure
-                const int LargeTypeSize = 32;                                       // If T is larger than this we'll trim an extra (additional) when under high pressure
-
-                const int LowTrimCount = 1;                                         // Trim one item when pressure is low
-                const int MediumTrimCount = 2;                                      // Trim two items when pressure is moderate
-                int HighTrimCount = SharedArrayPoolStatics.s_maxArraysPerPartition; // Trim all items when pressure is high
-
-                if (_count == 0)
-                {
-                    return;
-                }
-
-                int trimMilliseconds = pressure == Utilities.MemoryPressure.High ? HighTrimAfterMS : TrimAfterMS;
-
-                lock (this)
-                {
-                    if (_count == 0)
-                    {
-                        return;
-                    }
-
-                    if (_millisecondsTimestamp == 0)
-                    {
-                        _millisecondsTimestamp = currentMilliseconds;
-                        return;
-                    }
-
-                    if ((currentMilliseconds - _millisecondsTimestamp) <= trimMilliseconds)
-                    {
-                        return;
-                    }
-
-                    // We've elapsed enough time since the first item went into the partition.
-                    // Drop the top item so it can be collected and make the partition look a little newer.
-
-                    ArrayPoolEventSource log = ArrayPoolEventSource.Log;
-                    int trimCount = LowTrimCount;
-                    switch (pressure)
-                    {
-                        case Utilities.MemoryPressure.High:
-                            trimCount = HighTrimCount;
-
-                            // When pressure is high, aggressively trim larger arrays.
-                            if (bucketSize > LargeBucket)
-                            {
-                                trimCount++;
-                            }
-                            unsafe
-                            {
-#pragma warning disable 8500 // sizeof of managed types
-                                if (sizeof(T) > ModerateTypeSize)
-                                {
-                                    trimCount++;
-                                }
-                                if (sizeof(T) > LargeTypeSize)
-                                {
-                                    trimCount++;
-                                }
-#pragma warning restore 8500
-                            }
-                            break;
-
-                        case Utilities.MemoryPressure.Medium:
-                            trimCount = MediumTrimCount;
-                            break;
-                    }
-
-                    while (_count > 0 && trimCount-- > 0)
-                    {
-                        T[]? array = _arrays[--_count];
-                        Debug.Assert(array is not null, "No nulls should have been present in slots < _count.");
-                        _arrays[_count] = null;
-
-                        if (log.IsEnabled())
-                        {
-                            log.BufferTrimmed(array.GetHashCode(), array.Length, id);
-                        }
-                    }
-
-                    _millisecondsTimestamp = _count > 0 ?
-                        _millisecondsTimestamp + (trimMilliseconds / 4) : // Give the remaining items a bit more time
-                        0;
-                }
+                //Partition[] partitions = _partitions;
+                //for (int i = 0; i < partitions.Length; i++)
+                //{
+                //    partitions[i].Trim(currentMilliseconds, id, pressure, bucketSize);
+                //}
             }
         }
 
@@ -524,6 +480,9 @@ namespace System.Buffers
         internal static readonly int s_partitionCount = GetPartitionCount();
         /// <summary>The maximum number of arrays per array size to store per partition.</summary>
         internal static readonly int s_maxArraysPerPartition = GetMaxArraysPerPartition();
+        /// <summary>The maximum number of arrays to store in the fallback global queue.</summary>
+        /// <remarks>This will always be a power of 2.</remarks>
+        internal static readonly int s_maxArraysInGlobalQueue = (int)BitOperations.RoundUpToPowerOf2((uint)GetMaxArraysInGlobalQueue());
 
         /// <summary>Gets the maximum number of partitions to shard arrays into.</summary>
         /// <remarks>Defaults to int.MaxValue.  Whatever value is returned will end up being clamped to <see cref="Environment.ProcessorCount"/>.</remarks>
@@ -536,12 +495,21 @@ namespace System.Buffers
         }
 
         /// <summary>Gets the maximum number of arrays of a given size allowed to be cached per partition.</summary>
-        /// <returns>Defaults to 8. This does not factor in or impact the number of arrays cached per thread in TLS (currently only 1).</returns>
+        /// <returns>Defaults to 16. This does not factor in or impact the number of arrays cached per thread in TLS (currently only 1).</returns>
         private static int GetMaxArraysPerPartition()
         {
             return TryGetInt32EnvironmentVariable("DOTNET_SYSTEM_BUFFERS_SHAREDARRAYPOOL_MAXARRAYSPERPARTITION", out int result) && result > 0 ?
                 result :
-                8; // arbitrary limit
+                16; // arbitrary limit
+        }
+
+        /// <summary>Gets the maximum number of arrays of a given size stored in a global cache available to all threads.</summary>
+        /// <returns>Defaults to 1024.</returns>
+        private static int GetMaxArraysInGlobalQueue()
+        {
+            return TryGetInt32EnvironmentVariable("DOTNET_SYSTEM_BUFFERS_SHAREDARRAYPOOL_MAXGLOBALQUEUEARRAYS", out int result) && result > 0 ?
+                result :
+                1024; // arbitrary limit
         }
 
         /// <summary>Look up an environment variable and try to parse it as an Int32.</summary>

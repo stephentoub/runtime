@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace System.Runtime.InteropServices
@@ -74,6 +75,21 @@ namespace System.Runtime.InteropServices
             }
 
             list._size = count;
+        }
+
+        internal static T RemoveLast<T>(List<T> list)
+        {
+            Debug.Assert(list.Count > 0);
+
+            ref T slot = ref list._items![list._size - 1];
+            T item = slot;
+            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+            {
+                slot = default!;
+            }
+            list._size--;
+
+            return item;
         }
     }
 }
