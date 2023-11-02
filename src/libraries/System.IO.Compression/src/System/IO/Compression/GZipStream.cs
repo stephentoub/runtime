@@ -18,7 +18,14 @@ namespace System.IO.Compression
 
         public GZipStream(Stream stream, CompressionMode mode, bool leaveOpen)
         {
-            _deflateStream = new DeflateStream(stream, mode, leaveOpen, ZLibNative.GZip_DefaultWindowBits);
+            // For compatibility with .NET Framework where GZipStream supported decompressing
+            // data using either a gzip or a zlib header/footer, we use 47 as the windowBits
+            // when decompressing, which tells zlib to enable detection and allow either format.
+            int windowBits = mode == CompressionMode.Decompress ?
+                ZLibNative.GZipOrZLibInflate_WindowBits :
+                ZLibNative.GZip_DefaultWindowBits;
+
+            _deflateStream = new DeflateStream(stream, mode, leaveOpen, windowBits);
         }
 
         // Implies mode = Compress

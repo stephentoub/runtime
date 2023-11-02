@@ -141,6 +141,9 @@ namespace System.IO.Compression
         /// </summary>
         public const int GZip_DefaultWindowBits = 31;
 
+        /// <summary>ZLib <code>windowBits</code> value to indicate that inflate should allow either gzip or zlib formats.</summary>
+        public const int GZipOrZLibInflate_WindowBits = 47;
+
         /// <summary>
         /// <p><strong>From the ZLib manual:</strong></p>
         /// <p>The <code>memLevel</code> parameter specifies how much memory should be allocated for the internal compression state.
