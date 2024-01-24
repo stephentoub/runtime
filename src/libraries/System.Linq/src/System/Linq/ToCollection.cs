@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -28,19 +29,33 @@ namespace System.Linq
             [MethodImpl(MethodImplOptions.NoInlining)] // avoid large stack allocation impacting other paths
             static TSource[] EnumerableToArray(IEnumerable<TSource> source)
             {
-                if (source is null)
+                if (typeof(TSource).IsValueType)
                 {
-                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                    SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
+                    SegmentedArrayBuilder<TSource> builder = new(scratch);
+
+                    builder.AddNonICollectionRangeInlined(source);
+                    TSource[] result = builder.ToArray();
+
+                    builder.Dispose();
+                    return result;
                 }
+                else
+                {
+                    // Special-case reference types to use objects rather than TSources up until
+                    // the last moment when we actually need a TSource[] to hand back. This helps
+                    // reduce how many different instantiation of ArrayPool we need.
 
-                SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
-                SegmentedArrayBuilder<TSource> builder = new(scratch);
+                    SegmentedArrayBuilder<object?>.ScratchBuffer scratch = default;
+                    SegmentedArrayBuilder<object?> builder = new(scratch);
 
-                builder.AddNonICollectionRangeInlined(source);
-                TSource[] result = builder.ToArray();
+                    Debug.Assert(source is IEnumerable<object?>);
+                    builder.AddNonICollectionRange(Unsafe.As<IEnumerable<object?>>(source));
+                    TSource[] result = builder.UnsafeToArray<TSource>();
 
-                builder.Dispose();
-                return result;
+                    builder.Dispose();
+                    return result;
+                }
             }
         }
 

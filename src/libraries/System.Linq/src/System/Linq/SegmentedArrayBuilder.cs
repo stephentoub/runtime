@@ -5,6 +5,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace System.Collections.Generic
 {
@@ -266,6 +267,39 @@ namespace System.Collections.Generic
             else
             {
                 result = [];
+            }
+
+            return result;
+        }
+
+        /// <summary>Creates an array containing all of the elements in the builder.</summary>
+        /// <param name="additionalLength">The number of extra elements of room to allocate in the resulting array.</param>
+        /// <remarks>
+        /// The method creates an array of <typeparamref name="TActual"/> and copies the elements into it.
+        /// It _does not_ check that <typeparamref name="TActual"/> is compatible with <typeparamref name="T"/>.
+        /// If this is used incorrectly, it can result in memory corruption.
+        /// </remarks>
+        public readonly TActual[] UnsafeToArray<TActual>(int additionalLength = 0)
+        {
+            if (typeof(T).IsValueType || typeof(TActual).IsValueType)
+            {
+                Debug.Fail("UnsafeToArray should only be used with reference types.");
+                throw new UnreachableException("UnsafeToArray should only be used with reference types.");
+            }
+
+            TActual[] result = [];
+
+            int count = checked(Count + additionalLength);
+            if (count != 0)
+            {
+                result = GC.AllocateUninitializedArray<TActual>(count);
+                ToSpan(MemoryMarshal.CreateSpan(ref Unsafe.As<TActual, T>(ref MemoryMarshal.GetArrayDataReference(result)), result.Length));
+#if DEBUG
+                foreach (object? item in result)
+                {
+                    Debug.Assert(item is null or TActual, "UnsafeToArray must only be used where every object is a TActual.");
+                }
+#endif
             }
 
             return result;

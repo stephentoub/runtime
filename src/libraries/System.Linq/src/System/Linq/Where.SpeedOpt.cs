@@ -35,22 +35,44 @@ namespace System.Linq
 
             public override TSource[] ToArray()
             {
-                SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
-                SegmentedArrayBuilder<TSource> builder = new(scratch);
-
-                Func<TSource, bool> predicate = _predicate;
-                foreach (TSource item in _source)
+                if (typeof(TSource).IsValueType)
                 {
-                    if (predicate(item))
+                    SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
+                    SegmentedArrayBuilder<TSource> builder = new(scratch);
+
+                    Func<TSource, bool> predicate = _predicate;
+                    foreach (TSource item in _source)
                     {
-                        builder.Add(item);
+                        if (predicate(item))
+                        {
+                            builder.Add(item);
+                        }
                     }
+
+                    TSource[] result = builder.ToArray();
+                    builder.Dispose();
+
+                    return result;
                 }
+                else
+                {
+                    SegmentedArrayBuilder<object?>.ScratchBuffer scratch = default;
+                    SegmentedArrayBuilder<object?> builder = new(scratch);
 
-                TSource[] result = builder.ToArray();
-                builder.Dispose();
+                    Func<TSource, bool> predicate = _predicate;
+                    foreach (TSource item in _source)
+                    {
+                        if (predicate(item))
+                        {
+                            builder.Add(item);
+                        }
+                    }
 
-                return result;
+                    TSource[] result = builder.UnsafeToArray<TSource>();
+                    builder.Dispose();
+
+                    return result;
+                }
             }
 
             public override List<TSource> ToList()
@@ -178,21 +200,28 @@ namespace System.Linq
 
             public static TSource[] ToArray(ReadOnlySpan<TSource> source, Func<TSource, bool> predicate)
             {
-                SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
-                SegmentedArrayBuilder<TSource> builder = new(scratch);
-
-                foreach (TSource item in source)
+                if (typeof(TSource).IsValueType)
                 {
-                    if (predicate(item))
+                    SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
+                    SegmentedArrayBuilder<TSource> builder = new(scratch);
+
+                    foreach (TSource item in source)
                     {
-                        builder.Add(item);
+                        if (predicate(item))
+                        {
+                            builder.Add(item);
+                        }
                     }
+
+                    TSource[] result = builder.ToArray();
+                    builder.Dispose();
+
+                    return result;
                 }
+                else
+                {
 
-                TSource[] result = builder.ToArray();
-                builder.Dispose();
-
-                return result;
+                }
             }
 
             public override List<TSource> ToList() => ToList(_source, _predicate);
