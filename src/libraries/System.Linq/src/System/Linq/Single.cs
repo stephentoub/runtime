@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Linq
 {
@@ -107,38 +106,99 @@ namespace System.Linq
 
         private static TSource? TryGetSingle<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
         {
-            if (source is null)
-            {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
+            return source is IList<TSource> list ?
+                SingleList(list, predicate, out found) :
+                SingleEnumerable(source, predicate, out found);
 
-            if (predicate is null)
+            static TSource? SingleList(IList<TSource> list, Func<TSource, bool> predicate, out bool found)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
-
-            using (IEnumerator<TSource> e = source.GetEnumerator())
-            {
-                while (e.MoveNext())
+                if (predicate is null)
                 {
-                    TSource result = e.Current;
-                    if (predicate(result))
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
                     {
-                        while (e.MoveNext())
+                        TSource item = list[i];
+                        if (predicate(item))
                         {
-                            if (predicate(e.Current))
+                            while (++i < count)
                             {
-                                ThrowHelper.ThrowMoreThanOneMatchException();
+                                if (predicate(list[i]))
+                                {
+                                    ThrowHelper.ThrowMoreThanOneMatchException();
+                                }
                             }
+
+                            found = true;
+                            return item;
                         }
-                        found = true;
-                        return result;
                     }
                 }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        TSource item = span[i];
+                        if (predicate(item))
+                        {
+                            while ((uint)++i < (uint)span.Length)
+                            {
+                                if (predicate(span[i]))
+                                {
+                                    ThrowHelper.ThrowMoreThanOneMatchException();
+                                }
+                            }
+
+                            found = true;
+                            return item;
+                        }
+                    }
+                }
+
+                found = false;
+                return default;
             }
 
-            found = false;
-            return default;
+            static TSource? SingleEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
+            {
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
+
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                using (IEnumerator<TSource> e = source.GetEnumerator())
+                {
+                    while (e.MoveNext())
+                    {
+                        TSource result = e.Current;
+                        if (predicate(result))
+                        {
+                            while (e.MoveNext())
+                            {
+                                if (predicate(e.Current))
+                                {
+                                    ThrowHelper.ThrowMoreThanOneMatchException();
+                                }
+                            }
+
+                            found = true;
+                            return result;
+                        }
+                    }
+                }
+
+                found = false;
+                return default;
+            }
         }
     }
 }

@@ -45,48 +45,126 @@ namespace System.Linq
 
         public static bool Any<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
         {
-            if (source is null)
-            {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
+            return source is IList<TSource> list ?
+                AnyList(list, predicate) :
+                AnyEnumerable(source, predicate);
 
-            if (predicate is null)
+            static bool AnyList(IList<TSource> list, Func<TSource, bool> predicate)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
-
-            foreach (TSource element in source)
-            {
-                if (predicate(element))
+                if (predicate is null)
                 {
-                    return true;
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
                 }
+
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (predicate(list[i]))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (predicate(span[i]))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
 
-            return false;
+            static bool AnyEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate)
+            {
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
+
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                foreach (TSource element in source)
+                {
+                    if (predicate(element))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
         public static bool All<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
         {
-            if (source is null)
-            {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
+            return source is IList<TSource> list ?
+                AllList(list, predicate) :
+                AllEnumerable(source, predicate);
 
-            if (predicate is null)
+            static bool AllList(IList<TSource> list, Func<TSource, bool> predicate)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
-
-            foreach (TSource element in source)
-            {
-                if (!predicate(element))
+                if (predicate is null)
                 {
-                    return false;
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
                 }
+
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (!predicate(list[i]))
+                        {
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (!predicate(span[i]))
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
             }
 
-            return true;
+            static bool AllEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate)
+            {
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
+
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                foreach (TSource element in source)
+                {
+                    if (!predicate(element))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
         }
     }
 }

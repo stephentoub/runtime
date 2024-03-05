@@ -61,7 +61,6 @@ namespace System.Linq
             return found ? first! : defaultValue;
         }
 
-
         private static TSource? TryGetFirst<TSource>(this IEnumerable<TSource> source, out bool found)
         {
             if (source is null)
@@ -104,27 +103,72 @@ namespace System.Linq
 
         private static TSource? TryGetFirst<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
         {
-            if (source is null)
-            {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
+            return source is IList<TSource> list ?
+                FirstList(list, predicate, out found) :
+                FirstEnumerable(source, predicate, out found);
 
-            if (predicate is null)
+            static TSource? FirstList(IList<TSource> list, Func<TSource, bool> predicate, out bool found)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
-
-            foreach (TSource element in source)
-            {
-                if (predicate(element))
+                if (predicate is null)
                 {
-                    found = true;
-                    return element;
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
                 }
+
+                TSource element;
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        element = list[i];
+                        if (predicate(element))
+                        {
+                            found = true;
+                            return element;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        element = span[i];
+                        if (predicate(element))
+                        {
+                            found = true;
+                            return element;
+                        }
+                    }
+                }
+
+                found = false;
+                return default;
             }
 
-            found = false;
-            return default;
+            static TSource? FirstEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
+            {
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
+
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                foreach (TSource element in source)
+                {
+                    if (predicate(element))
+                    {
+                        found = true;
+                        return element;
+                    }
+                }
+
+                found = false;
+                return default;
+            }
         }
     }
 }

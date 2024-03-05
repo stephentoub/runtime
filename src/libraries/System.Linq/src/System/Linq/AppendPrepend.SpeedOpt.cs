@@ -15,41 +15,21 @@ namespace System.Linq
                 Debug.Assert(GetCount(onlyIfCheap: true) == -1);
                 TSource[] result;
 
-                if (_source is ICollection<TSource> c)
+                SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
+                SegmentedArrayBuilder<TSource> builder = new(scratch);
+                if (_appending)
                 {
-                    // Allocate an array of the exact size needed. We have a collection
-                    // with an additional item either before it or after it; copy them
-                    // all to the new array appropriately.
-                    result = new TSource[c.Count + 1];
-                    if (_appending)
-                    {
-                        c.CopyTo(result, 0);
-                        result[^1] = _item;
-                    }
-                    else
-                    {
-                        c.CopyTo(result, 1);
-                        result[0] = _item;
-                    }
+                    builder.AddNonICollectionRange(_source);
+                    builder.Add(_item);
                 }
                 else
                 {
-                    SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
-                    SegmentedArrayBuilder<TSource> builder = new(scratch);
-                    if (_appending)
-                    {
-                        builder.AddNonICollectionRange(_source);
-                        builder.Add(_item);
-                    }
-                    else
-                    {
-                        builder.Add(_item);
-                        builder.AddNonICollectionRange(_source);
-                    }
-
-                    result = builder.ToArray();
-                    builder.Dispose();
+                    builder.Add(_item);
+                    builder.AddNonICollectionRange(_source);
                 }
+
+                result = builder.ToArray();
+                builder.Dispose();
 
                 return result;
             }
@@ -184,35 +164,22 @@ namespace System.Linq
             {
                 Debug.Assert(GetCount(onlyIfCheap: true) == -1);
 
-                if (_source is ICollection<TSource> c)
+                // Create the new builder with the prepended content and source content. Then
+                // build the resulting array with enough space to also hold any appended content,
+                // and write the appended content directly into the resulting array.
+                SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
+                SegmentedArrayBuilder<TSource> builder = new(scratch);
+                for (SingleLinkedNode<TSource>? node = _prepended; node is not null; node = node.Linked)
                 {
-                    var result = new TSource[checked(_prependCount + c.Count + _appendCount)];
-
-                    _prepended?.Fill(result);
-                    c.CopyTo(result, _prependCount);
-                    _appended?.FillReversed(result);
-
-                    return result;
+                    builder.Add(node.Item);
                 }
-                else
-                {
-                    // Create the new builder with the prepended content and source content. Then
-                    // build the resulting array with enough space to also hold any appended content,
-                    // and write the appended content directly into the resulting array.
-                    SegmentedArrayBuilder<TSource>.ScratchBuffer scratch = default;
-                    SegmentedArrayBuilder<TSource> builder = new(scratch);
-                    for (SingleLinkedNode<TSource>? node = _prepended; node is not null; node = node.Linked)
-                    {
-                        builder.Add(node.Item);
-                    }
-                    builder.AddNonICollectionRange(_source);
+                builder.AddNonICollectionRange(_source);
 
-                    TSource[] result = builder.ToArray(_appendCount);
-                    builder.Dispose();
+                TSource[] result = builder.ToArray(_appendCount);
+                builder.Dispose();
 
-                    _appended?.FillReversed(result);
-                    return result;
-                }
+                _appended?.FillReversed(result);
+                return result;
             }
 
             public override TSource[] ToArray()

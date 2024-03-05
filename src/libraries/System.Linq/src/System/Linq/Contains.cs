@@ -18,23 +18,91 @@ namespace System.Linq
                 ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
             }
 
-            if (comparer is null)
+            // NOTE: This must _not_ delegate to Contains(source, value), even if comparer is null or EqualityComparer<TSource>.Default (and
+            // even if Contains(source, value) were switched to not delegate to this overload when the source isn't an ICollection<T>).
+            // While such a comparer is for default equality semantics, the collection itself may not have such semantics, e.g. if source
+            // is ICollection<T>, its Contains might use a different definition of equality, such as if the collection is a HashSet<T>
+            // constructed with a non-default comparer. In such a case, by calling this overload, the developer is asking to use the provided
+            // comparer's semantics rather than whatever the collection's semantics might be.
+
+            if (typeof(TSource).IsValueType && (comparer is null || comparer == EqualityComparer<TSource>.Default))
             {
-                foreach (TSource element in source)
+                // For value types and when using default equality semantics, use EqualityComparer<TValue>.Default.Equals directly to enable
+                // devirtualization and possibly inlining of the comparison operation.
+
+                if (source is IList<TSource> list)
                 {
-                    if (EqualityComparer<TSource>.Default.Equals(element, value)) // benefits from devirtualization and likely inlining
+                    if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
                     {
-                        return true;
+                        int count = list.Count;
+                        for (int i = 0; i < count; i++)
+                        {
+                            if (EqualityComparer<TSource>.Default.Equals(list[i], value))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (TSource element in span)
+                        {
+                            if (EqualityComparer<TSource>.Default.Equals(element, value))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (TSource element in source)
+                    {
+                        if (EqualityComparer<TSource>.Default.Equals(element, value))
+                        {
+                            return true;
+                        }
                     }
                 }
             }
             else
             {
-                foreach (TSource element in source)
+                // TSource is not a value type and/or a custom comparer is being used.
+
+                comparer ??= EqualityComparer<TSource>.Default;
+
+                if (source is IList<TSource> list)
                 {
-                    if (comparer.Equals(element, value))
+                    if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
                     {
-                        return true;
+                        int count = list.Count;
+                        for (int i = 0; i < count; i++)
+                        {
+                            if (comparer.Equals(list[i], value))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (TSource element in span)
+                        {
+                            if (comparer.Equals(element, value))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (TSource element in source)
+                    {
+                        if (comparer.Equals(element, value))
+                        {
+                            return true;
+                        }
                     }
                 }
             }
