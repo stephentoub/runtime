@@ -35,12 +35,9 @@ namespace System.Linq
             int count = 0;
             using (IEnumerator<TSource> e = source.GetEnumerator())
             {
-                checked
+                while (e.MoveNext())
                 {
-                    while (e.MoveNext())
-                    {
-                        count++;
-                    }
+                    checked { count++; }
                 }
             }
 
@@ -49,29 +46,66 @@ namespace System.Linq
 
         public static int Count<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
         {
-            if (source is null)
+            return source is IList<TSource> list ?
+                CountList(list, predicate) :
+                CountEnumerable(source, predicate);
+
+            static int CountList(IList<TSource> list, Func<TSource, bool> predicate)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                int count = 0;
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int listCount = list.Count;
+                    for (int i = 0; i < listCount; i++)
+                    {
+                        if (predicate(list[i]))
+                        {
+                            count++;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (predicate(span[i]))
+                        {
+                            count++;
+                        }
+                    }
+                }
+
+                return count;
             }
 
-            if (predicate is null)
+            static int CountEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
 
-            int count = 0;
-            foreach (TSource element in source)
-            {
-                checked
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                int count = 0;
+                foreach (TSource element in source)
                 {
                     if (predicate(element))
                     {
-                        count++;
+                        checked { count++; }
                     }
                 }
-            }
 
-            return count;
+                return count;
+            }
         }
 
         /// <summary>
@@ -131,20 +165,17 @@ namespace System.Linq
 
         public static long LongCount<TSource>(this IEnumerable<TSource> source)
         {
-            if (source is null)
+            if (TryGetNonEnumeratedCount(source, out int int32Count))
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                return int32Count;
             }
 
             long count = 0;
             using (IEnumerator<TSource> e = source.GetEnumerator())
             {
-                checked
+                while (e.MoveNext())
                 {
-                    while (e.MoveNext())
-                    {
-                        count++;
-                    }
+                    checked { count++; }
                 }
             }
 
@@ -164,13 +195,37 @@ namespace System.Linq
             }
 
             long count = 0;
-            foreach (TSource element in source)
+            if (source is IList<TSource> list)
             {
-                checked
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int listCount = list.Count;
+                    for (int i = 0; i < listCount; i++)
+                    {
+                        if (predicate(list[i]))
+                        {
+                            count++;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (predicate(span[i]))
+                        {
+                            count++;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                foreach (TSource element in source)
                 {
                     if (predicate(element))
                     {
-                        count++;
+                        checked { count++; }
                     }
                 }
             }

@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 
 namespace System.Linq
 {
@@ -111,35 +110,64 @@ namespace System.Linq
 
         private static TSource? TryGetLast<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
         {
-            if (source is null)
-            {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
-            }
+            return source is IList<TSource> list ?
+                LastList(list, predicate, out found) :
+                LastEnumerable(source, predicate, out found);
 
-            if (predicate is null)
+            static TSource? LastList(IList<TSource> list, Func<TSource, bool> predicate, out bool found)
             {
-                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
-            }
-
-            if (source is OrderedIterator<TSource> ordered)
-            {
-                return ordered.TryGetLast(predicate, out found);
-            }
-
-            if (source is IList<TSource> list)
-            {
-                for (int i = list.Count - 1; i >= 0; --i)
+                if (predicate is null)
                 {
-                    TSource result = list[i];
-                    if (predicate(result))
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                TSource result;
+                if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    for (int i = list.Count - 1; i >= 0; i--)
                     {
-                        found = true;
-                        return result;
+                        result = list[i];
+                        if (predicate(result))
+                        {
+                            found = true;
+                            return result;
+                        }
                     }
                 }
+                else
+                {
+                    for (int i = span.Length - 1; i >= 0; i--)
+                    {
+                        result = span[i];
+                        if (predicate(result))
+                        {
+                            found = true;
+                            return result;
+                        }
+                    }
+                }
+
+                found = false;
+                return default;
             }
-            else
+
+            static TSource? LastEnumerable(IEnumerable<TSource> source, Func<TSource, bool> predicate, out bool found)
             {
+                if (source is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.source);
+                }
+
+                if (predicate is null)
+                {
+                    ThrowHelper.ThrowArgumentNullException(ExceptionArgument.predicate);
+                }
+
+                if (source is OrderedIterator<TSource> ordered)
+                {
+                    return ordered.TryGetLast(predicate, out found);
+                }
+
                 using (IEnumerator<TSource> e = source.GetEnumerator())
                 {
                     while (e.MoveNext())
@@ -161,10 +189,10 @@ namespace System.Linq
                         }
                     }
                 }
-            }
 
-            found = false;
-            return default;
+                found = false;
+                return default;
+            }
         }
     }
 }

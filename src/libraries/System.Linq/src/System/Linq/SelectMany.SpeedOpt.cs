@@ -17,12 +17,28 @@ namespace System.Linq
                 }
 
                 int count = 0;
+                Func<TSource, IEnumerable<TResult>> selector = _selector;
 
-                foreach (TSource element in _source)
+                if (_source is not IList<TSource> list)
                 {
-                    checked
+                    foreach (TSource item in _source)
                     {
-                        count += _selector(element).Count();
+                        checked { count += selector(item).Count(); }
+                    }
+                }
+                else if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int listCount = list.Count;
+                    for (int i = 0; i < listCount; i++)
+                    {
+                        checked { count += selector(list[i]).Count(); }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        checked { count += selector(span[i]).Count(); }
                     }
                 }
 
@@ -35,9 +51,28 @@ namespace System.Linq
                 SegmentedArrayBuilder<TResult> builder = new(scratch);
 
                 Func<TSource, IEnumerable<TResult>> selector = _selector;
-                foreach (TSource item in _source)
+
+                if (_source is not IList<TSource> list)
                 {
-                    builder.AddRange(selector(item));
+                    foreach (TSource item in _source)
+                    {
+                        builder.AddRange(selector(item));
+                    }
+                }
+                else if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        builder.AddRange(selector(list[i]));
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        builder.AddRange(selector(span[i]));
+                    }
                 }
 
                 TResult[] result = builder.ToArray();
@@ -48,15 +83,34 @@ namespace System.Linq
 
             public override List<TResult> ToList()
             {
-                var list = new List<TResult>();
+                var result = new List<TResult>();
 
                 Func<TSource, IEnumerable<TResult>> selector = _selector;
-                foreach (TSource element in _source)
+
+                if (_source is not IList<TSource> list)
                 {
-                    list.AddRange(selector(element));
+                    foreach (TSource item in _source)
+                    {
+                        result.AddRange(selector(item));
+                    }
+                }
+                else if (!TryGetSpan(list, out ReadOnlySpan<TSource> span))
+                {
+                    int count = list.Count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        result.AddRange(selector(list[i]));
+                    }
+                }
+                else
+                {
+                    foreach (TSource item in span)
+                    {
+                        result.AddRange(selector(item));
+                    }
                 }
 
-                return list;
+                return result;
             }
         }
     }
