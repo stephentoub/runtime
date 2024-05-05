@@ -831,23 +831,6 @@ namespace System.Text.RegularExpressions
                             // Prefer the set with fewer values.
                             return s1CharsLength.CompareTo(s2CharsLength);
                         }
-
-                        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                        static float SumFrequencies(char[] chars)
-                        {
-                            float sum = 0;
-                            foreach (char c in chars)
-                            {
-                                // Lookup each character in the table.  Values >= 128 are ignored
-                                // and thus we'll get skew in the data.  It's already a gross approximation, though,
-                                // and it is primarily meant for disambiguation of ASCII letters.
-                                if (c < 128)
-                                {
-                                    sum += Frequency[c];
-                                }
-                            }
-                            return sum;
-                        }
                     }
 
                     // If one has chars and the other has a range, prefer the shorter set.
@@ -893,6 +876,23 @@ namespace System.Text.RegularExpressions
                         length;
                 }
             });
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float SumFrequencies(char[] chars)
+        {
+            float sum = 0;
+            foreach (char c in chars)
+            {
+                // Lookup each character in the table.  Values >= 128 are ignored
+                // and thus we'll get skew in the data.  It's already a gross approximation, though,
+                // and it is primarily meant for disambiguation of ASCII letters.
+                if (c < 128)
+                {
+                    sum += Frequency[c];
+                }
+            }
+            return sum;
+        }
 
         /// <summary>
         /// Computes a character class for the first character in tree.  This uses a more robust algorithm

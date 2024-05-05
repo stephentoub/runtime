@@ -1070,7 +1070,7 @@ namespace System.Text.RegularExpressions.Generator
                 {
                     requiredHelpers.Add(fieldName,
                     [
-                        $"/// <summary>Supports searching for the specified strings.</summary>",
+                        $"/// <summary>Supports searching{(stringComparison is StringComparison.OrdinalIgnoreCase ? " (ordinal case-insensitive)" : "")} for any of: {EscapeXmlComment(prefixes)}.</summary>",
                         $"internal static readonly SearchValues<string> {fieldName} = SearchValues.Create([{prefixes}], StringComparison.{stringComparison});", // explicitly using an array in case prefixes is large
                     ]);
                 }

@@ -128,7 +128,9 @@ namespace System.Text.RegularExpressions
             }
 
             // We're now left-to-right only.
+            Debug.Assert(!_rightToLeft);
 
+            // We couldn't find an ordinal case-sensitive prefix, so look for an ordinal case-insensitive one.
             prefix = RegexPrefixAnalyzer.FindPrefixOrdinalCaseInsensitive(root);
             if (prefix is { Length: > 1 })
             {
@@ -139,25 +141,15 @@ namespace System.Text.RegularExpressions
 
             // We're now left-to-right only and looking for multiple prefixes and/or sets.
 
-            // If there are multiple leading strings, we can search for any of them.
-            if (compiled)
+            // If there are multiple case-insensitive leading strings, we can search for any of them.
+            // Case-insensitive is almost always a win, so we prefer it over fixed-distance sets.
+            // Case-sensitive is a bit more nuanced, as it can be a win for some patterns and a loss for others,
+            // so we delay checking for it until we have more information about the sets involved.
+            if (compiled && RegexPrefixAnalyzer.FindPrefixes(root, ignoreCase: true) is { Length: > 1 } caseInsensitivePrefixes)
             {
-                if (RegexPrefixAnalyzer.FindPrefixes(root, ignoreCase: true) is { Length: > 1 } caseInsensitivePrefixes)
-                {
-                    LeadingPrefixes = caseInsensitivePrefixes;
-                    FindMode = FindNextStartingPositionMode.LeadingStrings_OrdinalIgnoreCase_LeftToRight;
-                    return;
-                }
-
-                // TODO: While some benchmarks benefit from this significantly, others regressed a bit (in particular those with few
-                //       matches). Before enabling this, we need to investigate the performance impact on real-world scenarios,
-                //       and see if there are ways to reduce the impact.
-                //if (RegexPrefixAnalyzer.FindPrefixes(root, ignoreCase: false) is { Length: > 1 } caseSensitivePrefixes)
-                //{
-                //    LeadingPrefixes = caseSensitivePrefixes;
-                //    FindMode = FindNextStartingPositionMode.LeadingStrings_LeftToRight;
-                //    return;
-                //}
+                LeadingPrefixes = caseInsensitivePrefixes;
+                FindMode = FindNextStartingPositionMode.LeadingStrings_OrdinalIgnoreCase_LeftToRight;
+                return;
             }
 
             // Build up a list of all of the sets that are a fixed distance from the start of the expression.
@@ -205,25 +197,39 @@ namespace System.Text.RegularExpressions
                     {
                         FixedDistanceLiteral = (fixedDistanceSets[0].Chars![0], null, fixedDistanceSets[0].Distance);
                         FindMode = FindNextStartingPositionMode.FixedDistanceChar_LeftToRight;
+                        return;
                     }
-                    else
-                    {
-                        // Limit how many sets we use to avoid doing lots of unnecessary work.  The list was already
-                        // sorted from best to worst, so just keep the first ones up to our limit.
-                        const int MaxSetsToUse = 3; // arbitrary tuned limit
-                        if (fixedDistanceSets.Count > MaxSetsToUse)
-                        {
-                            fixedDistanceSets.RemoveRange(MaxSetsToUse, fixedDistanceSets.Count - MaxSetsToUse);
-                        }
 
-                        // Store the sets, and compute which mode to use.
-                        FixedDistanceSets = fixedDistanceSets;
-                        FindMode = (fixedDistanceSets.Count == 1 && fixedDistanceSets[0].Distance == 0) ?
-                            FindNextStartingPositionMode.LeadingSet_LeftToRight :
-                            FindNextStartingPositionMode.FixedDistanceSets_LeftToRight;
-                        _asciiLookups = new uint[fixedDistanceSets.Count][];
+                    // We know we have sets we can use. However, if the sets contain only characters that heuristically are likely
+                    // to be common, and if we can find multiple case-sensitive prefixes we could use instead, we might be better
+                    // off just using those prefixes (the search for prefixes is a bit more expensive than the search for individual
+                    // characters, so we have to guess as to which will be better). We only do the check if we were able to build up
+                    // a set of chars, since if we couldn't get a set, there's no chance we could find multiple prefixes (the latter
+                    // implies the former).
+                    if (compiled &&
+                        fixedDistanceSets[0].Chars is not null &&
+                        RegexPrefixAnalyzer.SumFrequencies(fixedDistanceSets[0].Chars!) > 1.0f && // arbitrary cut-off based on experimentation
+                        RegexPrefixAnalyzer.FindPrefixes(root, ignoreCase: false) is { Length: > 1 } caseSensitivePrefixes)
+                    {
+                        LeadingPrefixes = caseSensitivePrefixes;
+                        FindMode = FindNextStartingPositionMode.LeadingStrings_LeftToRight;
+                        return;
                     }
-                    return;
+
+                    // Limit how many sets we use to avoid doing lots of unnecessary work.  The list was already
+                    // sorted from best to worst, so just keep the first ones up to our limit.
+                    const int MaxSetsToUse = 3; // arbitrary tuned limit
+                    if (fixedDistanceSets.Count > MaxSetsToUse)
+                    {
+                        fixedDistanceSets.RemoveRange(MaxSetsToUse, fixedDistanceSets.Count - MaxSetsToUse);
+                    }
+
+                    // Store the sets, and compute which mode to use.
+                    FixedDistanceSets = fixedDistanceSets;
+                    FindMode = (fixedDistanceSets.Count == 1 && fixedDistanceSets[0].Distance == 0) ?
+                        FindNextStartingPositionMode.LeadingSet_LeftToRight :
+                        FindNextStartingPositionMode.FixedDistanceSets_LeftToRight;
+                    _asciiLookups = new uint[fixedDistanceSets.Count][];
                 }
             }
 
