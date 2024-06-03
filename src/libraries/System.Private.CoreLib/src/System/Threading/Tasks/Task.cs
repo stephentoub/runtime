@@ -3056,6 +3056,24 @@ namespace System.Threading.Tasks
             bool returnValue = SpinWait(millisecondsTimeout);
             if (!returnValue)
             {
+                // We're about to block waiting for the task to complete, which is expensive, and if
+                // the task being waited on depends on some work to run, this thread could end up waiting
+                // for some other thread to do work. If the the two threads are part of the same scheduler,
+                // such as the thread pool, that could lead to a deadlock. This is made worse by it also
+                // leading to a possible priority inversion on previously queued work. Each thread in the
+                // thread pool has a local queue. A key motivator for this local queue is it allows this
+                // thread to create work items that it will then prioritize above all other work in the
+                // pool. However, while this thread makes its own local queue the top priority, it's every
+                // other thread's lowest priority. If this thread blocks, all of its created work that's
+                // supposed to be high priority becomes low priority, and work that's typically part of a
+                // currently in-flight operation gets deprioritized relative to new requests coming into the
+                // pool, which can lead to the whole system slowing down or even deadlocking. To address that,
+                // just before we block, we move all local work into a global queue, so that it's at least
+                // prioritized by other threads more fairly with respect to other work.
+                ThreadPoolWorkQueue.TransferAllLocalWorkItemsToGlobal();
+
+                // Create a ManualResetEventSlim, hook it up as a continuation such that it'll be Set
+                // when the Task completes, then block on that event.
                 var mres = new SetOnInvokeMres();
                 try
                 {
