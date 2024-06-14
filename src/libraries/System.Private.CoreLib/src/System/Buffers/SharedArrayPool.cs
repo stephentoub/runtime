@@ -1,8 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -383,51 +386,19 @@ namespace System.Buffers
         private sealed class Partition
         {
             /// <summary>The arrays in the partition.</summary>
-            private readonly Array?[] _arrays = new Array[SharedArrayPoolStatics.s_maxArraysPerPartition];
-            /// <summary>Number of arrays stored in <see cref="_arrays"/>.</summary>
-            private int _count;
+            private readonly ConcurrentQueueSegment<Array> _arrays = new ConcurrentQueueSegment<Array>(SharedArrayPoolStatics.s_maxArraysPerPartition);
             /// <summary>Timestamp set by Trim when it sees this as 0.</summary>
             private int _millisecondsTimestamp;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool TryPush(Array array)
-            {
-                bool enqueued = false;
-                Monitor.Enter(this);
-                Array?[] arrays = _arrays;
-                int count = _count;
-                if ((uint)count < (uint)arrays.Length)
-                {
-                    if (count == 0)
-                    {
-                        // Reset the time stamp now that we're transitioning from empty to non-empty.
-                        // Trim will see this as 0 and initialize it to the current time when Trim is called.
-                        _millisecondsTimestamp = 0;
-                    }
-
-                    Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(arrays), count) = array; // arrays[count] = array, but avoiding stelemref
-                    _count = count + 1;
-                    enqueued = true;
-                }
-                Monitor.Exit(this);
-                return enqueued;
-            }
+            public bool TryPush(Array array) => _arrays.TryEnqueue(array);
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             public Array? TryPop()
             {
-                Array? arr = null;
-                Monitor.Enter(this);
-                Array?[] arrays = _arrays;
-                int count = _count - 1;
-                if ((uint)count < (uint)arrays.Length)
-                {
-                    arr = arrays[count];
-                    arrays[count] = null;
-                    _count = count;
-                }
-                Monitor.Exit(this);
-                return arr;
+                _arrays.TryDequeue(out Array? array);
+                _millisecondsTimestamp = 0;
+                return array;
             }
 
             public void Trim(int currentMilliseconds, int id, Utilities.MemoryPressure pressure)
@@ -435,58 +406,42 @@ namespace System.Buffers
                 const int TrimAfterMS = 60 * 1000;                                  // Trim after 60 seconds for low/moderate pressure
                 const int HighTrimAfterMS = 10 * 1000;                              // Trim after 10 seconds for high pressure
 
-                if (_count == 0)
+                int trimMilliseconds = pressure == Utilities.MemoryPressure.High ? HighTrimAfterMS : TrimAfterMS;
+
+                if (_millisecondsTimestamp == 0)
+                {
+                    _millisecondsTimestamp = currentMilliseconds;
+                    return;
+                }
+
+                if ((currentMilliseconds - _millisecondsTimestamp) <= trimMilliseconds)
                 {
                     return;
                 }
 
-                int trimMilliseconds = pressure == Utilities.MemoryPressure.High ? HighTrimAfterMS : TrimAfterMS;
+                // We've elapsed enough time since the first item went into the partition.
+                // Drop the top item(s) so they can be collected.
 
-                lock (this)
+                int trimCount = pressure switch
                 {
-                    if (_count == 0)
+                    Utilities.MemoryPressure.High => SharedArrayPoolStatics.s_maxArraysPerPartition,
+                    Utilities.MemoryPressure.Medium => 2,
+                    _ => 1,
+                };
+
+                ArrayPoolEventSource log = ArrayPoolEventSource.Log;
+                bool notKnownEmpty = true;
+                while (trimCount-- > 0 && (notKnownEmpty = _arrays.TryDequeue(out Array? array)))
+                {
+                    if (log.IsEnabled())
                     {
-                        return;
+                        log.BufferTrimmed(array!.GetHashCode(), array.Length, id);
                     }
-
-                    if (_millisecondsTimestamp == 0)
-                    {
-                        _millisecondsTimestamp = currentMilliseconds;
-                        return;
-                    }
-
-                    if ((currentMilliseconds - _millisecondsTimestamp) <= trimMilliseconds)
-                    {
-                        return;
-                    }
-
-                    // We've elapsed enough time since the first item went into the partition.
-                    // Drop the top item(s) so they can be collected.
-
-                    int trimCount = pressure switch
-                    {
-                        Utilities.MemoryPressure.High => SharedArrayPoolStatics.s_maxArraysPerPartition,
-                        Utilities.MemoryPressure.Medium => 2,
-                        _ => 1,
-                    };
-
-                    ArrayPoolEventSource log = ArrayPoolEventSource.Log;
-                    while (_count > 0 && trimCount-- > 0)
-                    {
-                        Array? array = _arrays[--_count];
-                        Debug.Assert(array is not null, "No nulls should have been present in slots < _count.");
-                        _arrays[_count] = null;
-
-                        if (log.IsEnabled())
-                        {
-                            log.BufferTrimmed(array.GetHashCode(), array.Length, id);
-                        }
-                    }
-
-                    _millisecondsTimestamp = _count > 0 ?
-                        _millisecondsTimestamp + (trimMilliseconds / 4) : // Give the remaining items a bit more time
-                        0;
                 }
+
+                _millisecondsTimestamp = notKnownEmpty ?
+                    _millisecondsTimestamp + (trimMilliseconds / 4) : // Give the remaining items a bit more time
+                    0;
             }
         }
     }
@@ -512,8 +467,8 @@ namespace System.Buffers
         /// <returns>Defaults to 32. This does not factor in or impact the number of arrays cached per thread in TLS (currently only 1).</returns>
         private static int GetMaxArraysPerPartition()
         {
-            return TryGetInt32EnvironmentVariable("DOTNET_SYSTEM_BUFFERS_SHAREDARRAYPOOL_MAXARRAYSPERPARTITION", out int result) && result > 0 ?
-                result :
+            return TryGetInt32EnvironmentVariable("DOTNET_SYSTEM_BUFFERS_SHAREDARRAYPOOL_MAXARRAYSPERPARTITION", out int result) && result > 0 && result < 1_048_576 ? // arbitrary limit
+                (int)BitOperations.RoundUpToPowerOf2((uint)result) :
                 32; // arbitrary limit
         }
 
