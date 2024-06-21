@@ -4,6 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace System.Threading
 {
@@ -185,7 +186,7 @@ namespace System.Threading
         private static extern object? CompareExchangeObject(ref object? location1, object? value, object? comparand);
 
         // Note that getILIntrinsicImplementationForInterlocked() in vm\jitinterface.cpp replaces
-        // the body of the following method with the following IL:
+        // the body of the following method with the following IL when T is a reference type:
         //     ldarg.0
         //     ldarg.1
         //     ldarg.2
@@ -194,18 +195,70 @@ namespace System.Threading
         // The workaround is no longer strictly necessary now that we have Unsafe.As but it does
         // have the advantage of being less sensitive to JIT's inliner decisions.
 
-        /// <summary>Compares two instances of the specified reference type <typeparamref name="T"/> for reference equality and, if they are equal, replaces the first one.</summary>
-        /// <param name="location1">The destination, whose value is compared by reference with <paramref name="comparand"/> and possibly replaced.</param>
-        /// <param name="value">The value that replaces the destination value if the comparison by reference results in equality.</param>
-        /// <param name="comparand">The object that is compared by reference to the value at <paramref name="location1"/>.</param>
+        /// <summary>Compares two instances of the specified type <typeparamref name="T"/> for equality and, if they are equal, replaces the first one.</summary>
+        /// <param name="location1">The destination, whose value is compared with <paramref name="comparand"/> and possibly replaced.</param>
+        /// <param name="value">The value that replaces the destination value if the comparison results in equality.</param>
+        /// <param name="comparand">The object that is compared to the value at <paramref name="location1"/>.</param>
         /// <returns>The original value in <paramref name="location1"/>.</returns>
         /// <exception cref="NullReferenceException">The address of <paramref name="location1"/> is a null pointer.</exception>
-        /// <typeparam name="T">The type to be used for <paramref name="location1"/>, <paramref name="value"/>, and <paramref name="comparand"/>. This type must be a reference type.</typeparam>
+        /// <exception cref="NotSupportedException">An unsupported <typeparamref name="T"/> is specified.</exception>
+        /// <typeparam name="T">
+        /// The type to be used for <paramref name="location1"/>, <paramref name="value"/>, and <paramref name="comparand"/>.
+        /// This type must be a reference type, an enum type, or one of the following value types: <see cref="bool"/>, <see cref="byte"/>,
+        /// <see cref="sbyte"/>, <see cref="char"/>, <see cref="short"/>, <see cref="ushort"/>, <see cref="int"/>, <see cref="uint"/>,
+        /// <see cref="long"/>, <see cref="ulong"/>, <see cref="nint"/>, or <see cref="nuint"/>.
+        /// </typeparam>
         [Intrinsic]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         [return: NotNullIfNotNull(nameof(location1))]
-        public static T CompareExchange<T>(ref T location1, T value, T comparand) where T : class? =>
-            Unsafe.As<T>(CompareExchange(ref Unsafe.As<T, object?>(ref location1), value, comparand));
+        public static T CompareExchange<T>(ref T location1, T value, T comparand)
+        {
+            if (!typeof(T).IsValueType)
+            {
+                object? result = CompareExchange(ref Unsafe.As<T, object?>(ref location1), value, comparand);
+                return Unsafe.As<object, T>(ref result!);
+            }
+
+            // We could use the internal RuntimeHelpers.IsBitwiseEquatable, but that would make the set of types supported
+            // harder to reason about, and would mean various changes to a type (like adding an Equals override) could then
+            // cause Interlocked operations with it to start failing. Alternatively, we could make this support all types
+            // of sizes 1, 2, 4, or 8 bytes, and always use bitwise equality semantics even if that's not what the type does,
+            // and document that behavior.
+
+            if (typeof(T) == typeof(byte) ||
+                typeof(T) == typeof(sbyte) ||
+                typeof(T) == typeof(bool) ||
+                (typeof(T).IsEnum && Unsafe.SizeOf<T>() == 1))
+            {
+                return Unsafe.BitCast<byte, T>(CompareExchange(ref Unsafe.As<T, byte>(ref location1), Unsafe.BitCast<T, byte>(value), Unsafe.BitCast<T, byte>(comparand)));
+            }
+
+            if (typeof(T) == typeof(short) ||
+                typeof(T) == typeof(ushort) ||
+                typeof(T) == typeof(char) ||
+                (typeof(T).IsEnum && Unsafe.SizeOf<T>() == 2))
+            {
+                return Unsafe.BitCast<ushort, T>(CompareExchange(ref Unsafe.As<T, ushort>(ref location1), Unsafe.BitCast<T, ushort>(value), Unsafe.BitCast<T, ushort>(comparand)));
+            }
+
+            if (typeof(T) == typeof(int) ||
+                typeof(T) == typeof(uint) ||
+                ((typeof(T) == typeof(nint) || typeof(T) == typeof(nuint)) && IntPtr.Size == 4) ||
+                (typeof(T).IsEnum && Unsafe.SizeOf<T>() == 4))
+            {
+                return Unsafe.BitCast<uint, T>(CompareExchange(ref Unsafe.As<T, uint>(ref location1), Unsafe.BitCast<T, uint>(value), Unsafe.BitCast<T, uint>(comparand)));
+            }
+
+            if (typeof(T) == typeof(long) ||
+                typeof(T) == typeof(ulong) ||
+                ((typeof(T) == typeof(nint) || typeof(T) == typeof(nuint)) && IntPtr.Size == 8) ||
+                (typeof(T).IsEnum && Unsafe.SizeOf<T>() == 8))
+            {
+                return Unsafe.BitCast<ulong, T>(CompareExchange(ref Unsafe.As<T, ulong>(ref location1), Unsafe.BitCast<T, ulong>(value), Unsafe.BitCast<T, ulong>(comparand)));
+            }
+
+            throw new NotSupportedException();
+        }
         #endregion
 
         #region Add
