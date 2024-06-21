@@ -548,7 +548,7 @@ namespace System.Text.RegularExpressions.Generator
                 lines.Add($"{{");
                 int uncheckedStart = lines.Count;
                 lines.Add(excludedAsciiChars.Count == 128 ?
-                          $"    int i = span.IndexOfAnyExceptInRange('\0', '\u007f');" :
+                          $"    int i = span.IndexOfAnyExceptInRange('\\0', '\\u007f');" :
                           $"    int i = span.IndexOfAnyExcept({EmitSearchValues(excludedAsciiChars.ToArray(), requiredHelpers)});");
                 lines.Add($"    if ((uint)i < (uint)span.Length)");
                 lines.Add($"    {{");
