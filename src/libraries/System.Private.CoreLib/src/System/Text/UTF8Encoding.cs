@@ -14,6 +14,9 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 using System.Text.Unicode;
 
 namespace System.Text
@@ -674,6 +677,19 @@ namespace System.Text
         // EncodingNLS, UTF7Encoding, UTF8Encoding, UTF32Encoding, ASCIIEncoding, UnicodeEncoding
         // parent method is safe
 
+        public override unsafe string GetString(byte[] bytes)
+        {
+            if (bytes is null)
+            {
+                ThrowHelper.ThrowArgumentNullException(ExceptionArgument.bytes, ExceptionResource.ArgumentNull_Array);
+            }
+
+            return GetStringCore(bytes);
+        }
+
+        [CompExactlyDependsOn(typeof(AdvSimd.Arm64))]
+        [CompExactlyDependsOn(typeof(Sse2))]
+        [CompExactlyDependsOn(typeof(Avx2))]
         public override unsafe string GetString(byte[] bytes, int index, int count)
         {
             if (bytes is null)
@@ -693,14 +709,272 @@ namespace System.Text
                 ThrowHelper.ThrowArgumentOutOfRangeException(ExceptionArgument.bytes, ExceptionResource.ArgumentOutOfRange_IndexCountBuffer);
             }
 
-            // Avoid problems with empty input buffer
-            if (count == 0)
-                return string.Empty;
+            return GetStringCore(bytes.AsSpan(index, count));
+        }
 
-            fixed (byte* pBytes = bytes)
+        internal override unsafe string GetStringCore(ReadOnlySpan<byte> bytes)
+        {
+            if (bytes.IsEmpty)
             {
-                return string.CreateStringFromEncoding(pBytes + index, count, this);
+                return string.Empty;
             }
+
+            // Get a fast char count assuming the data is valid UTF8, and use that count to allocate the resulting
+            // string. Then do the transcoding into that string, the act of which will validate the data. If it was
+            // valid UTF8, then the count will have been accurate, and we can proceed to use the fully-filled result
+            // string. If the count turned out to be incorrect because the data was invalid (or erroneously concurrently
+            // changed while we were processing it), then fall back to the normal logic.
+            if (Avx512BW.IsSupported || Avx2.IsSupported || Sse2.IsSupported || AdvSimd.Arm64.IsSupported)
+            {
+                fixed (byte* bytesPtr = &MemoryMarshal.GetReference(bytes))
+                {
+                    nuint nuByteCount = (uint)bytes.Length;
+                    nuint charCount = Ascii.GetIndexOfFirstNonAsciiByte(bytesPtr, nuByteCount);
+                    if (charCount < nuByteCount)
+                    {
+                        charCount +=
+                            Avx512BW.IsSupported ? GetCharCountIfValidUtf8_Vector512(bytesPtr + charCount, nuByteCount - charCount) :
+                            Avx2.IsSupported ? GetCharCountIfValidUtf8_Vector256(bytesPtr + charCount, nuByteCount - charCount) :
+                            Sse2.IsSupported || AdvSimd.Arm64.IsSupported ? GetCharCountIfValidUtf8_Vector128(bytesPtr + charCount, nuByteCount - charCount) :
+                            throw new UnreachableException();
+                    }
+
+                    if (charCount <= nuByteCount)
+                    {
+                        string result = string.FastAllocateString((int)charCount);
+                        OperationStatus opStatus = Utf8.ToUtf16(
+                            bytes, new Span<char>(ref result.GetRawStringData(), result.Length),
+                            out int bytesRead, out int charsWritten,
+                            replaceInvalidSequences: false);
+                        if (opStatus == OperationStatus.Done && bytesRead == bytes.Length && charsWritten == result.Length)
+                        {
+                            return result;
+                        }
+                    }
+                }
+            }
+
+            return base.GetStringCore(bytes);
+        }
+
+        [CompExactlyDependsOn(typeof(AdvSimd.Arm64))]
+        [CompExactlyDependsOn(typeof(Sse2))]
+        private static unsafe nuint GetCharCountIfValidUtf8_Vector128(byte* bytes, nuint byteCount)
+        {
+            Debug.Assert(Vector128.IsHardwareAccelerated);
+            Debug.Assert(Sse2.IsSupported || AdvSimd.Arm64.IsSupported);
+            Debug.Assert(bytes is not null);
+            Debug.Assert(byteCount > 0);
+
+            nuint cumulativeUtf16Chars = 0;
+
+            // General logic: all bytes in the ranges [00..7F] and [C0..EF] should
+            // result in 1 char being generated, since they all correspond to ASCII
+            // chars or lead bytes corresponding to BMP chars. All bytes in the
+            // range [F0..FF] should result in 2 chars being generated since they
+            // are lead bytes corresponding to the astral planes.
+            Vector128<byte> vecC0 = Vector128.Create((byte)0xC0);
+            Vector128<byte> vec70 = Vector128.Create((byte)0x70);
+
+            // Read the first byte or more of data. This also has potential to read
+            // data before the start of the buffer, which we'll discard.
+
+            byte* pAlignedReadStart = (byte*)((nuint)bytes & ~(nuint)(Vector128<byte>.Count - 1));
+            byte* pAlignedReadEnd = (byte*)((nuint)(bytes + byteCount) /* can't integer overflow due to C memory addressing rules */ & ~(nuint)(Vector128<byte>.Count - 1));
+
+            Vector128<byte> thisStripe = Vector128.LoadAligned(pAlignedReadStart);
+
+            uint nonContinuationBytesBitmap = Vector128.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+            uint astralLeadBytesBitmap = Vector128.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+            int numPrefixBytesToDiscard = (int)bytes & (Vector128<byte>.Count - 1);
+            uint startMask = unchecked((uint)(-1)) << numPrefixBytesToDiscard;
+
+            // Do any suffix bytes need to be discarded?
+
+            byte* pJustPastEndOfData = bytes + byteCount;
+            int numSuffixBytesToDiscard = -(int)pJustPastEndOfData & (Vector128<byte>.Count - 1); // could be 0
+            uint finalMask = (unchecked((uint)(-1)) << numSuffixBytesToDiscard) >> numSuffixBytesToDiscard;
+
+            if (pAlignedReadStart == pAlignedReadEnd)
+            {
+                nonContinuationBytesBitmap &= finalMask;
+                astralLeadBytesBitmap &= finalMask;
+            }
+
+            nonContinuationBytesBitmap &= startMask;
+            cumulativeUtf16Chars += uint.PopCount(nonContinuationBytesBitmap);
+
+            astralLeadBytesBitmap &= startMask;
+            cumulativeUtf16Chars += uint.PopCount(astralLeadBytesBitmap);
+
+            // Now read the rest of the data in a loop.
+            while (pAlignedReadStart < pAlignedReadEnd)
+            {
+                thisStripe = Vector128.LoadAligned(pAlignedReadStart + Vector128<byte>.Count);
+                pAlignedReadStart += Vector128<byte>.Count;
+
+                nonContinuationBytesBitmap = Vector128.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+                astralLeadBytesBitmap = Avx2.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+                // If we just ran past the end of the buffer, discard the extra bytes.
+                if (pAlignedReadStart == pAlignedReadEnd)
+                {
+                    nonContinuationBytesBitmap &= finalMask;
+                    astralLeadBytesBitmap &= finalMask;
+                }
+
+                cumulativeUtf16Chars += uint.PopCount(nonContinuationBytesBitmap);
+                cumulativeUtf16Chars += uint.PopCount(astralLeadBytesBitmap);
+            }
+
+            return cumulativeUtf16Chars;
+        }
+
+        [CompExactlyDependsOn(typeof(Avx2))]
+        private static unsafe nuint GetCharCountIfValidUtf8_Vector256(byte* bytes, nuint byteCount)
+        {
+            Debug.Assert(Vector256.IsHardwareAccelerated);
+            Debug.Assert(Avx2.IsSupported);
+            Debug.Assert(bytes is not null);
+            Debug.Assert(byteCount > 0);
+
+            nuint cumulativeUtf16Chars = 0;
+
+            // General logic: all bytes in the ranges [00..7F] and [C0..EF] should
+            // result in 1 char being generated, since they all correspond to ASCII
+            // chars or lead bytes corresponding to BMP chars. All bytes in the
+            // range [F0..FF] should result in 2 chars being generated since they
+            // are lead bytes corresponding to the astral planes.
+            Vector256<byte> vecC0 = Vector256.Create((byte)0xC0);
+            Vector256<byte> vec70 = Vector256.Create((byte)0x70);
+
+            // Read the first byte or more of data. This also has potential to read
+            // data before the start of the buffer, which we'll discard.
+
+            byte* pAlignedReadStart = (byte*)((nuint)bytes & ~(nuint)(Vector256<byte>.Count - 1));
+            byte* pAlignedReadEnd = (byte*)((nuint)(bytes + byteCount) /* can't integer overflow due to C memory addressing rules */ & ~(nuint)(Vector256<byte>.Count - 1));
+
+            Vector256<byte> thisStripe = Vector256.LoadAligned(pAlignedReadStart);
+
+            uint nonContinuationBytesBitmap = Vector256.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+            uint astralLeadBytesBitmap = Avx2.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+            int numPrefixBytesToDiscard = (int)bytes & (Vector256<byte>.Count - 1);
+            uint startMask = unchecked((uint)(-1)) << numPrefixBytesToDiscard;
+
+            // Do any suffix bytes need to be discarded?
+
+            byte* pJustPastEndOfData = bytes + byteCount;
+            int numSuffixBytesToDiscard = -(int)pJustPastEndOfData & (Vector256<byte>.Count - 1); // could be 0
+            uint finalMask = (unchecked((uint)(-1)) << numSuffixBytesToDiscard) >> numSuffixBytesToDiscard;
+
+            if (pAlignedReadStart == pAlignedReadEnd)
+            {
+                nonContinuationBytesBitmap &= finalMask;
+                astralLeadBytesBitmap &= finalMask;
+            }
+
+            nonContinuationBytesBitmap &= startMask;
+            cumulativeUtf16Chars += uint.PopCount(nonContinuationBytesBitmap);
+
+            astralLeadBytesBitmap &= startMask;
+            cumulativeUtf16Chars += uint.PopCount(astralLeadBytesBitmap);
+
+            // Now read the rest of the data in a loop.
+            while (pAlignedReadStart < pAlignedReadEnd)
+            {
+                thisStripe = Vector256.LoadAligned(pAlignedReadStart + Vector256<byte>.Count);
+                pAlignedReadStart += Vector256<byte>.Count;
+
+                nonContinuationBytesBitmap = Vector256.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+                astralLeadBytesBitmap = Avx2.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+                // If we just ran past the end of the buffer, discard the extra bytes.
+                if (pAlignedReadStart == pAlignedReadEnd)
+                {
+                    nonContinuationBytesBitmap &= finalMask;
+                    astralLeadBytesBitmap &= finalMask;
+                }
+
+                cumulativeUtf16Chars += uint.PopCount(nonContinuationBytesBitmap);
+                cumulativeUtf16Chars += uint.PopCount(astralLeadBytesBitmap);
+            }
+
+            return cumulativeUtf16Chars;
+        }
+
+        [CompExactlyDependsOn(typeof(Avx512BW))]
+        private static unsafe nuint GetCharCountIfValidUtf8_Vector512(byte* bytes, nuint byteCount)
+        {
+            Debug.Assert(Vector512.IsHardwareAccelerated);
+            Debug.Assert(Avx512BW.IsSupported);
+            Debug.Assert(bytes is not null);
+            Debug.Assert(byteCount > 0);
+
+            ulong cumulativeUtf16Chars = 0;
+
+            // General logic: all bytes in the ranges [00..7F] and [C0..EF] should
+            // result in 1 char being generated, since they all correspond to ASCII
+            // chars or lead bytes corresponding to BMP chars. All bytes in the
+            // range [F0..FF] should result in 2 chars being generated since they
+            // are lead bytes corresponding to the astral planes.
+            Vector512<byte> vecC0 = Vector512.Create((byte)0xC0);
+            Vector512<byte> vec70 = Vector512.Create((byte)0x70);
+
+            // Read the first byte or more of data. This also has potential to read
+            // data before the start of the buffer, which we'll discard.
+
+            byte* pAlignedReadStart = (byte*)((nuint)bytes & ~(nuint)(Vector512<byte>.Count - 1));
+            byte* pAlignedReadEnd = (byte*)((nuint)(bytes + byteCount) /* can't integer overflow due to C memory addressing rules */ & ~(nuint)(Vector512<byte>.Count - 1));
+
+            Vector512<byte> thisStripe = Vector512.LoadAligned(pAlignedReadStart);
+
+            ulong nonContinuationBytesBitmap = Vector512.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+            ulong astralLeadBytesBitmap = Avx512BW.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+            int numPrefixBytesToDiscard = (int)bytes & (Vector512<byte>.Count - 1);
+            ulong startMask = unchecked((ulong)(-1)) << numPrefixBytesToDiscard;
+
+            // Do any suffix bytes need to be discarded?
+
+            byte* pJustPastEndOfData = bytes + byteCount;
+            int numSuffixBytesToDiscard = -(int)pJustPastEndOfData & (Vector512<byte>.Count - 1); // could be 0
+            ulong finalMask = (unchecked((ulong)(-1)) << numSuffixBytesToDiscard) >> numSuffixBytesToDiscard;
+
+            if (pAlignedReadStart == pAlignedReadEnd)
+            {
+                nonContinuationBytesBitmap &= finalMask;
+                astralLeadBytesBitmap &= finalMask;
+            }
+
+            nonContinuationBytesBitmap &= startMask;
+            cumulativeUtf16Chars += ulong.PopCount(nonContinuationBytesBitmap);
+
+            astralLeadBytesBitmap &= startMask;
+            cumulativeUtf16Chars += ulong.PopCount(astralLeadBytesBitmap);
+
+            // Now read the rest of the data in a loop.
+            while (pAlignedReadStart < pAlignedReadEnd)
+            {
+                thisStripe = Vector512.LoadAligned(pAlignedReadStart + Vector512<byte>.Count);
+                pAlignedReadStart += Vector512<byte>.Count;
+
+                nonContinuationBytesBitmap = Vector512.GreaterThan(thisStripe.AsSByte(), vecC0.AsSByte()).ExtractMostSignificantBits();
+                astralLeadBytesBitmap = Avx512BW.SubtractSaturate(thisStripe, vec70).ExtractMostSignificantBits();
+
+                // If we just ran past the end of the buffer, discard the extra bytes.
+                if (pAlignedReadStart == pAlignedReadEnd)
+                {
+                    nonContinuationBytesBitmap &= finalMask;
+                    astralLeadBytesBitmap &= finalMask;
+                }
+
+                cumulativeUtf16Chars += ulong.PopCount(nonContinuationBytesBitmap);
+                cumulativeUtf16Chars += ulong.PopCount(astralLeadBytesBitmap);
+            }
+
+            return (uint)cumulativeUtf16Chars;
         }
 
         //
