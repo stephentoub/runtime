@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
@@ -905,16 +906,18 @@ namespace System.Text
         {
             ArgumentNullException.ThrowIfNull(bytes);
 
-            ArgumentOutOfRangeException.ThrowIfNegative(byteCount);
-
-            return string.CreateStringFromEncoding(bytes, byteCount, this);
+            return GetStringCore(new ReadOnlySpan<byte>(bytes, byteCount));
         }
 
-        public unsafe string GetString(ReadOnlySpan<byte> bytes)
+        public unsafe string GetString(ReadOnlySpan<byte> bytes) =>
+            GetStringCore(bytes);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal virtual unsafe string GetStringCore(ReadOnlySpan<byte> bytes)
         {
-            fixed (byte* bytesPtr = &MemoryMarshal.GetNonNullPinnableReference(bytes))
+            fixed (byte* ptr = &MemoryMarshal.GetNonNullPinnableReference(bytes))
             {
-                return string.CreateStringFromEncoding(bytesPtr, bytes.Length, this);
+                return string.CreateStringFromEncoding(ptr, bytes.Length, this);
             }
         }
 

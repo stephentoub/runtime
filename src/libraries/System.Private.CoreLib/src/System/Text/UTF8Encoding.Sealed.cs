@@ -130,9 +130,20 @@ namespace System.Text
                 }
             }
 
-            private unsafe string GetStringForSmallInput(byte[] bytes)
+            internal override unsafe string GetStringCore(ReadOnlySpan<byte> bytes)
             {
-                Debug.Assert(bytes != null);
+                if (bytes.Length <= MaxSmallInputElementCount)
+                {
+                    return GetStringForSmallInput(bytes);
+                }
+                else
+                {
+                    return base.GetStringCore(bytes);
+                }
+            }
+
+            private unsafe string GetStringForSmallInput(ReadOnlySpan<byte> bytes)
+            {
                 Debug.Assert(bytes.Length <= MaxSmallInputElementCount);
 
                 char* pDestination = stackalloc char[MaxSmallInputElementCount]; // each byte produces at most one char
