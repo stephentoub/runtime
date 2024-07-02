@@ -26,13 +26,14 @@ namespace System.Collections.Generic
 
             if (typeof(T) == typeof(string))
             {
-                return Unsafe.As<EqualityComparer<T>>(new StringEqualityComparer());
+                return new StringEqualityComparer();
             }
 
             if (SupportsGenericIEquatableInterfaces)
             {
                 return Unsafe.As<EqualityComparer<T>>(EqualityComparerHelpers.GetComparer(typeof(T).TypeHandle));
             }
+
             return new ObjectEqualityComparer<T>();
         }
 
