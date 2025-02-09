@@ -196,7 +196,7 @@ namespace System.Linq
             return source.CreateOrderedAsyncEnumerable(keySelector, comparer, descending: true);
         }
 
-        private abstract partial class OrderedIterator<TElement> : IOrderedAsyncEnumerable<TElement>
+        private abstract partial class OrderedIterator<TElement> : Iterator<TElement>, IOrderedAsyncEnumerable<TElement>
         {
             internal readonly IAsyncEnumerable<TElement> _source;
 

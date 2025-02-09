@@ -22,8 +22,13 @@ namespace System.Linq.Tests
                 yield return AsyncEnumerable.Empty<T>();
             }
 
-            yield return items.ToAsyncEnumerable();
-            yield return items.ToAsyncEnumerable().Yield();
+            IAsyncEnumerable<T> source = items.ToAsyncEnumerable();
+            yield return source;
+
+            source = source.Yield();
+            yield return source.Select(i => i);
+            yield return source.Where(i => true);
+            yield return source.Take(int.MaxValue);
         }
 
         protected static async Task ConsumeAsync<T>(IAsyncEnumerable<T> source)
