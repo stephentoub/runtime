@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,7 +27,15 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
-            return Impl(source.WithCancellation(cancellationToken).ConfigureAwait(false), value, comparer ?? EqualityComparer<TSource>.Default);
+            EqualityComparer<TSource> defaultComparer = EqualityComparer<TSource>.Default;
+            comparer ??= defaultComparer;
+
+            if (comparer == defaultComparer && source is Iterator<TSource> iterator)
+            {
+                return iterator.ContainsAsync(value, cancellationToken);
+            }
+
+            return Impl(source.WithCancellation(cancellationToken).ConfigureAwait(false), value, comparer);
 
             async static ValueTask<bool> Impl(
                 ConfiguredCancelableAsyncEnumerable<TSource> source,

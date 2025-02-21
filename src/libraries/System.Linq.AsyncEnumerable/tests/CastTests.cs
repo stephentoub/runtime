@@ -36,9 +36,9 @@ namespace System.Linq.Tests
         [Fact]
         public async Task IncorrectType_Throws()
         {
-            await Assert.ThrowsAsync<InvalidCastException>(async () => await ConsumeAsync(CreateSource<object>(2, 8).Cast<string>()));
-            await Assert.ThrowsAsync<InvalidCastException>(async () => await ConsumeAsync(CreateSource("2", "8").Cast<int>()));
-            await Assert.ThrowsAsync<InvalidCastException>(async () => await ConsumeAsync(CreateSource("2", "8").Cast<CastTests>()));
+            await Assert.ThrowsAsync<InvalidCastException>(async () => await CreateSource<object>(2, 8).Cast<string>().ConsumeAsync());
+            await Assert.ThrowsAsync<InvalidCastException>(async () => await CreateSource("2", "8").Cast<int>().ConsumeAsync());
+            await Assert.ThrowsAsync<InvalidCastException>(async () => await CreateSource("2", "8").Cast<CastTests>().ConsumeAsync());
         }
 
         [Fact]
@@ -59,7 +59,7 @@ namespace System.Linq.Tests
         public async Task InterfaceCalls_ExpectedCounts()
         {
             TrackingAsyncEnumerable<object> source = CreateSource<object>("1", "2", "3").Track();
-            await ConsumeAsync(source.Cast<string>());
+            await source.Cast<string>().ConsumeAsync();
             Assert.Equal(4, source.MoveNextAsyncCount);
             Assert.Equal(3, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

@@ -76,41 +76,41 @@ namespace System.Linq.Tests
         public async Task Cancellation_Cancels()
         {
             IAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16);
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.TakeWhile(i => true).WithCancellation(new CancellationToken(true))));
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.TakeWhile(i => true).WithCancellation(new CancellationToken(true)).ConsumeAsync());
 
             CancellationTokenSource cts;
 
             cts = new CancellationTokenSource();
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.TakeWhile(i =>
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.TakeWhile(i =>
             {
                 cts.Cancel();
                 return true;
-            }).WithCancellation(cts.Token)));
+            }).WithCancellation(cts.Token).ConsumeAsync());
 
             cts = new CancellationTokenSource();
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.TakeWhile(async (i, ct) =>
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.TakeWhile(async (i, ct) =>
             {
                 Assert.Equal(cts.Token, ct);
                 await Task.Yield();
                 cts.Cancel();
                 return true;
-            }).WithCancellation(cts.Token)));
+            }).WithCancellation(cts.Token).ConsumeAsync());
 
             cts = new CancellationTokenSource();
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.TakeWhile((i, index) =>
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.TakeWhile((i, index) =>
             {
                 cts.Cancel();
                 return true;
-            }).WithCancellation(cts.Token)));
+            }).WithCancellation(cts.Token).ConsumeAsync());
 
             cts = new CancellationTokenSource();
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.TakeWhile(async (i, index, ct) =>
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.TakeWhile(async (i, index, ct) =>
             {
                 Assert.Equal(cts.Token, ct);
                 await Task.Yield();
                 cts.Cancel();
                 return true;
-            }).WithCancellation(cts.Token)));
+            }).WithCancellation(cts.Token).ConsumeAsync());
         }
 
         [Fact]
@@ -125,13 +125,13 @@ namespace System.Linq.Tests
                     foreach (bool trueFalse in TrueFalseBools)
                     {
                         source = CreateSource(1, 2, 3, 4).Track();
-                        await ConsumeAsync((useAsync, useIndex) switch
+                        await ((useAsync, useIndex) switch
                         {
                             (false, false) => source.TakeWhile(i => trueFalse),
                             (false, true) => source.TakeWhile((i, index) => trueFalse),
                             (true, false) => source.TakeWhile(async (i, ct) => trueFalse),
                             (true, true) => source.TakeWhile(async (i, index, ct) => trueFalse),
-                        });
+                        }).ConsumeAsync();
                         Assert.Equal(trueFalse ? 5 : 1, source.MoveNextAsyncCount);
                         Assert.Equal(trueFalse ? 4 : 1, source.CurrentCount);
                         Assert.Equal(1, source.DisposeAsyncCount);

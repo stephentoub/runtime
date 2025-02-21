@@ -131,7 +131,7 @@ namespace System.Linq.Tests
 
             first = CreateSource(2, 4, 8, 16).Track();
             second = CreateSource(1, 3, 5).Track();
-            await ConsumeAsync(first.Zip(second));
+            await first.Zip(second).ConsumeAsync();
             Assert.Equal(4, first.MoveNextAsyncCount);
             Assert.Equal(3, first.CurrentCount);
             Assert.Equal(1, first.DisposeAsyncCount);
@@ -141,7 +141,7 @@ namespace System.Linq.Tests
 
             first = CreateSource(2, 4, 8, 16).Track();
             second = CreateSource(1, 3, 5).Track();
-            await ConsumeAsync(first.Zip(second, (f, s) => (f, s)));
+            await first.Zip(second, (f, s) => (f, s)).ConsumeAsync();
             Assert.Equal(4, first.MoveNextAsyncCount);
             Assert.Equal(3, first.CurrentCount);
             Assert.Equal(1, first.DisposeAsyncCount);
@@ -151,7 +151,7 @@ namespace System.Linq.Tests
 
             first = CreateSource(1, 3, 5).Track();
             second = CreateSource(2, 4, 8, 16).Track();
-            await ConsumeAsync(first.Zip(second, async (f, s, ct) => (f, s)));
+            await first.Zip(second, async (f, s, ct) => (f, s)).ConsumeAsync();
             Assert.Equal(4, first.MoveNextAsyncCount);
             Assert.Equal(3, first.CurrentCount);
             Assert.Equal(1, first.DisposeAsyncCount);
@@ -162,7 +162,7 @@ namespace System.Linq.Tests
             first = CreateSource(1, 3, 5).Track();
             second = CreateSource(2, 4, 8, 16).Track();
             third = CreateSource(42, 84).Track();
-            await ConsumeAsync(first.Zip(second, third));
+            await first.Zip(second, third).ConsumeAsync();
             Assert.Equal(3, first.MoveNextAsyncCount);
             Assert.Equal(2, first.CurrentCount);
             Assert.Equal(1, first.DisposeAsyncCount);

@@ -80,7 +80,7 @@ namespace System.Linq.Tests
         public async Task InterfaceCalls_ExpectedCounts()
         {
             TrackingAsyncEnumerable<int> source = CreateSource(1, 2, 3, 4, 5, 6, 7, 8, 9, 10).Track();
-            await ConsumeAsync(source.Chunk(3));
+            await source.Chunk(3).ConsumeAsync();
             Assert.Equal(11, source.MoveNextAsyncCount);
             Assert.Equal(10, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

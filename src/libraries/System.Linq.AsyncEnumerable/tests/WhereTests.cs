@@ -95,7 +95,7 @@ namespace System.Linq.Tests
             async Task Validate(Func<IAsyncEnumerable<int>, IAsyncEnumerable<int>> factory)
             {
                 TrackingAsyncEnumerable<int> source = CreateSource(1, 2, 3, 4).Track();
-                await ConsumeAsync(factory(source));
+                await factory(source).ConsumeAsync();
                 Assert.Equal(5, source.MoveNextAsyncCount);
                 Assert.Equal(4, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);

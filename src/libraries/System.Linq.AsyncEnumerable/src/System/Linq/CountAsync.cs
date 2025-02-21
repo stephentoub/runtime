@@ -23,6 +23,11 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.CountAsync(cancellationToken);
+            }
+
             return Impl(source, cancellationToken);
 
             static async ValueTask<int> Impl(

@@ -23,6 +23,11 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.FirstAsync(cancellationToken);
+            }
+
             return Impl(source, cancellationToken);
 
             static async ValueTask<TSource> Impl(
@@ -133,8 +138,15 @@ namespace System.Linq
         /// <exception cref="ArgumentNullException"><paramref name="source" /> is <see langword="null" />.</exception>
         public static ValueTask<TSource?> FirstOrDefaultAsync<TSource>(
             this IAsyncEnumerable<TSource> source,
-            CancellationToken cancellationToken = default) =>
-            FirstOrDefaultAsync(source, default(TSource), cancellationToken)!;
+            CancellationToken cancellationToken = default)
+        {
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.FirstOrDefaultAsync(cancellationToken);
+            }
+
+            return FirstOrDefaultAsync(source, default(TSource), cancellationToken)!;
+        }
 
         /// <summary>Returns the first element of a sequence, or a default value if the sequence contains no elements.</summary>
         /// <typeparam name="TSource">The type of the elements of <paramref name="source" />.</typeparam>

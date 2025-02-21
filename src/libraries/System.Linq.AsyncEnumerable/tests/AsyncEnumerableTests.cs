@@ -11,29 +11,52 @@ namespace System.Linq.Tests
 {
     public abstract class AsyncEnumerableTests
     {
-        protected static IAsyncEnumerable<T> CreateSource<T>(params T[] items) =>
+        protected static IAsyncEnumerable<T> CreateSource<T>(params IEnumerable<T> items) =>
             items.ToAsyncEnumerable().Yield();
 
-        protected static IEnumerable<IAsyncEnumerable<T>> CreateSources<T>(params T[] items)
+        protected static IEnumerable<IAsyncEnumerable<T>> CreateSources<T>(params IEnumerable<T> items)
         {
-            if (items.Length == 0)
+            List<IAsyncEnumerable<T>> sources = [];
+            sources.Add(items.ToAsyncEnumerable().Yield());
+            sources.Add(items.ToList().ToAsyncEnumerable().Yield());
+
+            List<Func<IAsyncEnumerable<T>, IAsyncEnumerable<T>>> transforms =
+            [
+                // Concat
+                e => e.Concat(AsyncEnumerable.Empty<T>().Iterate()),
+
+                // Reverse
+                e => e.Reverse().Reverse(),
+
+                // Select
+                e => e.Select(i => i),
+
+                // SelectMany
+                e => e.SelectMany<T, T>(i => [i]),
+
+                // Take
+                e => e.Take(int.MaxValue),
+                e => e.TakeLast(int.MaxValue),
+                e => e.TakeWhile(i => true),
+
+                // Skip
+                e => e.SkipWhile(i => false),
+
+                // Where
+                e => e.Where(i => true),
+            ];
+
+            foreach (IAsyncEnumerable<T> source in sources)
             {
-                yield return Enumerable.Empty<T>().ToAsyncEnumerable();
-                yield return AsyncEnumerable.Empty<T>();
+                // Yield the source itself.
+                yield return source;
+
+                foreach (Func<IAsyncEnumerable<T>, IAsyncEnumerable<T>> transform in transforms)
+                {
+                    // Yield a single transform on the source
+                    yield return transform(source);
+                }
             }
-
-            yield return items.ToAsyncEnumerable();
-            yield return items.ToAsyncEnumerable().Yield();
-        }
-
-        protected static async Task ConsumeAsync<T>(IAsyncEnumerable<T> source)
-        {
-            await foreach (T item in source) { }
-        }
-
-        protected static async Task ConsumeAsync<T>(ConfiguredCancelableAsyncEnumerable<T> source)
-        {
-            await foreach (T item in source) { }
         }
 
         protected static void FillRandom(Random rand, int[] values)
@@ -114,6 +137,25 @@ namespace System.Linq.Tests
             }
 
             throw exception;
+        }
+
+        public static async IAsyncEnumerable<T> Iterate<T>(
+            this IAsyncEnumerable<T> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await foreach (T item in source.WithCancellation(cancellationToken))
+            {
+                yield return item;
+            }
+        }
+
+        public static async Task ConsumeAsync<T>(this IAsyncEnumerable<T> source)
+        {
+            await foreach (T item in source) { }
+        }
+
+        public static async Task ConsumeAsync<T>(this ConfiguredCancelableAsyncEnumerable<T> source)
+        {
+            await foreach (T item in source) { }
         }
     }
 

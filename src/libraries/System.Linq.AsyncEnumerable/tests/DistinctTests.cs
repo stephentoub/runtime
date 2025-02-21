@@ -50,7 +50,7 @@ namespace System.Linq.Tests
             IAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16);
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.Distinct().WithCancellation(new CancellationToken(true)));
+                await source.Distinct().WithCancellation(new CancellationToken(true)).ConsumeAsync();
             });
         }
 
@@ -58,7 +58,7 @@ namespace System.Linq.Tests
         public async Task InterfaceCalls_ExpectedCounts()
         {
             TrackingAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16).Track();
-            await ConsumeAsync(source.Distinct());
+            await source.Distinct().ConsumeAsync();
             Assert.Equal(5, source.MoveNextAsyncCount);
             Assert.Equal(4, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

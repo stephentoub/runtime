@@ -22,6 +22,11 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.LastAsync(cancellationToken);
+            }
+
             return Impl(source, cancellationToken);
 
             static async ValueTask<TSource> Impl(
@@ -183,8 +188,15 @@ namespace System.Linq
         /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
         public static ValueTask<TSource?> LastOrDefaultAsync<TSource>(
             this IAsyncEnumerable<TSource> source,
-            CancellationToken cancellationToken = default) =>
-            LastOrDefaultAsync(source, default(TSource), cancellationToken);
+            CancellationToken cancellationToken = default)
+        {
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.LastOrDefaultAsync(cancellationToken);
+            }
+
+            return LastOrDefaultAsync(source, default(TSource), cancellationToken);
+        }
 
         /// <summary>Returns the last element of a sequence, or a default value if the sequence contains no elements.</summary>
         /// <typeparam name="TSource">The type of the elements of <paramref name="source" />.</typeparam>
