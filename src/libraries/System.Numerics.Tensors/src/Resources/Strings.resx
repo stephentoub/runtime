@@ -231,4 +231,7 @@
   <data name="Argument_CannotReshapeNonContiguousOrDense" xml:space="preserve">
     <value>The Tensor provided is either non-contiguous or non-dense. Reshape only works with contigous and dense memory. You may need to Broadcast or Copy the data to be contigous.</value>
   </data>
+  <data name="Argument_MinGreaterThanMax" xml:space="preserve">
+    <value>A minimum value may not be greater than a maximum value.</value>
+  </data>
 </root>

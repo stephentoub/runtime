@@ -228,5 +228,11 @@ namespace System
         {
             throw new ArgumentException(SR.Argument_CannotReshapeNonContiguousOrDense);
         }
+
+        [DoesNotReturn]
+        internal static void ThrowArgument_MinGreaterThanMax()
+        {
+            throw new ArgumentException(SR.Argument_MinGreaterThanMax);
+        }
     }
 }
