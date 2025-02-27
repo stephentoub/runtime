@@ -33,7 +33,7 @@ namespace System.Numerics.Tensors
 
         /// <summary>T.RootN(x, n)</summary>
         private readonly struct SquaredDifferenceOperator<T>(T subtrahend) : IStatefulUnaryOperator<T>
-            where T : ISubtractionOperators<T, T, T>, IMultiplyOperators<T, T, T>
+            where T : INumberBase<T>
         {
             private readonly T _subtrahend = subtrahend;
 
@@ -42,6 +42,7 @@ namespace System.Numerics.Tensors
             public T Invoke(T x)
             {
                 T diff = x - _subtrahend;
+                diff = T.Abs(diff); // only relevant to non-vectorizable types
                 return diff * diff;
             }
 
