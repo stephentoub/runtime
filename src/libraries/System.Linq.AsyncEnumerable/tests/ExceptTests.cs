@@ -73,7 +73,7 @@ namespace System.Linq.Tests
         {
             TrackingAsyncEnumerable<int> first = CreateSource(2, 4, 8, 16).Track();
             TrackingAsyncEnumerable<int> second = CreateSource(1, 3, 5).Track();
-            await ConsumeAsync(first.Except(second));
+            await first.Except(second).ConsumeAsync();
 
             Assert.Equal(5, first.MoveNextAsyncCount);
             Assert.Equal(4, first.CurrentCount);

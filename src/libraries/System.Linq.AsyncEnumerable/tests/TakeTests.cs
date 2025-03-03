@@ -73,8 +73,8 @@ namespace System.Linq.Tests
         public async Task Cancellation_Cancels()
         {
             IAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16);
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.Take(1).WithCancellation(new CancellationToken(true))));
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await ConsumeAsync(source.Take(new Range(new(0), new(3))).WithCancellation(new CancellationToken(true))));
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.Take(1).WithCancellation(new CancellationToken(true)).ConsumeAsync());
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await source.Take(new Range(new(0), new(3))).WithCancellation(new CancellationToken(true)).ConsumeAsync());
         }
 
         [Fact]
@@ -83,19 +83,19 @@ namespace System.Linq.Tests
             TrackingAsyncEnumerable<int> source;
 
             source = CreateSource(1, 2, 3, 4).Track();
-            await ConsumeAsync(source.Take(1));
+            await source.Take(1).ConsumeAsync();
             Assert.Equal(1, source.MoveNextAsyncCount);
             Assert.Equal(1, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);
 
             source = CreateSource(1, 2, 3, 4).Track();
-            await ConsumeAsync(source.Take(3));
+            await source.Take(3).ConsumeAsync();
             Assert.Equal(3, source.MoveNextAsyncCount);
             Assert.Equal(3, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);
 
             source = CreateSource(1, 2, 3, 4).Track();
-            await ConsumeAsync(source.Take(new Range(new(0), new(1))));
+            await source.Take(new Range(new(0), new(1))).ConsumeAsync();
             Assert.Equal(1, source.MoveNextAsyncCount);
             Assert.Equal(1, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

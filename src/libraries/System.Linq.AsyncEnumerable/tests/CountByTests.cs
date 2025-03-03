@@ -66,23 +66,23 @@ namespace System.Linq.Tests
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.CountBy(x =>
+                await source.CountBy(x =>
                 {
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.CountBy(async (x, ct) =>
+                await source.CountBy(async (x, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 
@@ -92,7 +92,7 @@ namespace System.Linq.Tests
         public async Task InterfaceCalls_ExpectedCounts(bool useAsync)
         {
             TrackingAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16, 2, 7, 8).Track();
-            await ConsumeAsync(useAsync ? source.CountBy(x => x) : source.CountBy(async (x, ct) => x));
+            await (useAsync ? source.CountBy(x => x) : source.CountBy(async (x, ct) => x)).ConsumeAsync();
             Assert.Equal(8, source.MoveNextAsyncCount);
             Assert.Equal(7, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

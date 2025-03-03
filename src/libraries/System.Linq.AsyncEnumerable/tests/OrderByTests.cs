@@ -176,7 +176,7 @@ namespace System.Linq.Tests
             {
                 await Assert.ThrowsAsync<OperationCanceledException>(async () =>
                 {
-                    await ConsumeAsync(source.WithCancellation(new CancellationToken(true)));
+                    await source.WithCancellation(new CancellationToken(true)).ConsumeAsync();
                 });
             }
         }
@@ -192,7 +192,7 @@ namespace System.Linq.Tests
             async Task Validate(Func<IAsyncEnumerable<int>, IAsyncEnumerable<int>> factory)
             {
                 TrackingAsyncEnumerable<int> source = CreateSource(Enumerable.Range(0, 100).ToArray()).Track();
-                await ConsumeAsync(factory(source));
+                await factory(source).ConsumeAsync();
                 Assert.Equal(101, source.MoveNextAsyncCount);
                 Assert.Equal(100, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);

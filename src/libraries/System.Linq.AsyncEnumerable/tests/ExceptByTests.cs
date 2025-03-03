@@ -85,23 +85,23 @@ namespace System.Linq.Tests
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(first.ExceptBy(second, x =>
+                await first.ExceptBy(second, x =>
                 {
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(first.ExceptBy(second, async (x, ct) =>
+                await first.ExceptBy(second, async (x, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 
@@ -113,7 +113,7 @@ namespace System.Linq.Tests
             TrackingAsyncEnumerable<int> first = CreateSource(2, 4, 8, 16, 32, 64).Track();
             TrackingAsyncEnumerable<int> second = CreateSource(1, 3, 5).Track();
             int funcCount = 0;
-            await ConsumeAsync(useAsync ?
+            await (useAsync ?
                 first.ExceptBy(second, async (x, ct) =>
                 {
                     funcCount++;
@@ -123,7 +123,7 @@ namespace System.Linq.Tests
                 {
                     funcCount++;
                     return x;
-                }));
+                })).ConsumeAsync();
             Assert.Equal(7, first.MoveNextAsyncCount);
             Assert.Equal(6, first.CurrentCount);
             Assert.Equal(1, first.DisposeAsyncCount);

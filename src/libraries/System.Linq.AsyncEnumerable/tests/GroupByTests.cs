@@ -115,45 +115,45 @@ namespace System.Linq.Tests
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupBy(s =>
+                await source.GroupBy(s =>
                 {
                     cts.Cancel();
                     return s;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupBy(async (s, ct) =>
+                await source.GroupBy(async (s, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return s;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupBy(s => s, s =>
+                await source.GroupBy(s => s, s =>
                 {
                     cts.Cancel();
                     return s;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupBy(async (s, ct) => s, async (s, ct) =>
+                await source.GroupBy(async (s, ct) => s, async (s, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return s;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 
@@ -167,7 +167,7 @@ namespace System.Linq.Tests
             {
                 keySelectorCount = 0;
                 source = CreateSource(1, 2, 3, 4).Track();
-                await ConsumeAsync(useAsync ?
+                await (useAsync ?
                     source.GroupBy(async (i, ct) =>
                     {
                         keySelectorCount++;
@@ -177,7 +177,7 @@ namespace System.Linq.Tests
                     {
                         keySelectorCount++;
                         return i;
-                    }));
+                    })).ConsumeAsync();
                 Assert.Equal(5, source.MoveNextAsyncCount);
                 Assert.Equal(4, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);
@@ -185,7 +185,7 @@ namespace System.Linq.Tests
 
                 keySelectorCount = elementSelectorCount = 0;
                 source = CreateSource(1, 2, 3, 4).Track();
-                await ConsumeAsync(useAsync ?
+                await (useAsync ?
                     source.GroupBy(async (i, ct) =>
                     {
                         keySelectorCount++;
@@ -203,7 +203,7 @@ namespace System.Linq.Tests
                     {
                         elementSelectorCount++;
                         return i;
-                    }));
+                    })).ConsumeAsync();
                 Assert.Equal(5, source.MoveNextAsyncCount);
                 Assert.Equal(4, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);
@@ -212,7 +212,7 @@ namespace System.Linq.Tests
 
                 keySelectorCount = resultSelectorCount = 0;
                 source = CreateSource(1, 2, 3, 4).Track();
-                await ConsumeAsync(useAsync ?
+                await (useAsync ?
                     source.GroupBy(async (i, ct) =>
                     {
                         keySelectorCount++;
@@ -230,7 +230,7 @@ namespace System.Linq.Tests
                     {
                         resultSelectorCount++;
                         return key;
-                    }));
+                    })).ConsumeAsync();
                 Assert.Equal(5, source.MoveNextAsyncCount);
                 Assert.Equal(4, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);
@@ -239,7 +239,7 @@ namespace System.Linq.Tests
 
                 keySelectorCount = elementSelectorCount = resultSelectorCount = 0;
                 source = CreateSource(1, 2, 3, 4).Track();
-                await ConsumeAsync(useAsync ?
+                await (useAsync ?
                     source.GroupBy(async (i, ct) =>
                     {
                         keySelectorCount++;
@@ -265,7 +265,7 @@ namespace System.Linq.Tests
                     {
                         resultSelectorCount++;
                         return key;
-                    }));
+                    })).ConsumeAsync();
                 Assert.Equal(5, source.MoveNextAsyncCount);
                 Assert.Equal(4, source.CurrentCount);
                 Assert.Equal(1, source.DisposeAsyncCount);

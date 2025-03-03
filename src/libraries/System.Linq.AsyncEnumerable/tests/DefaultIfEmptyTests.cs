@@ -61,13 +61,13 @@ namespace System.Linq.Tests
             TrackingAsyncEnumerable<int> source;
 
             source = CreateSource(2, 4, 8, 16).Track();
-            await ConsumeAsync(source.DefaultIfEmpty());
+            await source.DefaultIfEmpty().ConsumeAsync();
             Assert.Equal(5, source.MoveNextAsyncCount);
             Assert.Equal(4, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);
 
             source = AsyncEnumerable.Empty<int>().Track();
-            await ConsumeAsync(source.DefaultIfEmpty(42));
+            await source.DefaultIfEmpty(42).ConsumeAsync();
             Assert.Equal(1, source.MoveNextAsyncCount);
             Assert.Equal(0, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

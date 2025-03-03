@@ -26,19 +26,26 @@ namespace System.Linq
 
             return
                 source.IsKnownEmpty() ? Empty<TSource>() :
-                Impl(source, predicate, default);
+                source is Iterator<TSource> iterator ? iterator.Where(source, predicate) :
+                WhereIterator(source, predicate, default);
+        }
 
-            static async IAsyncEnumerable<TSource> Impl(
-                IAsyncEnumerable<TSource> source,
-                Func<TSource, bool> predicate,
-                [EnumeratorCancellation] CancellationToken cancellationToken)
+        /// <summary>Filters a sequence of values based on a predicate.</summary>
+        /// <typeparam name="TSource">The type of the elements of <paramref name="source"/>.</typeparam>
+        /// <param name="source">An <see cref="IAsyncEnumerable{T}"/> to filter.</param>
+        /// <param name="predicate">A function to test each element for a condition.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> to monitor for cancellation requests. The default is <see cref="CancellationToken.None"/>.</param>
+        /// <returns>An <see cref="IAsyncEnumerable{T}"/> that contains elements from the input sequence that satisfy the condition.</returns>
+        private static async IAsyncEnumerable<TSource> WhereIterator<TSource>(
+            IAsyncEnumerable<TSource> source,
+            Func<TSource, bool> predicate,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await foreach (TSource element in source.WithCancellation(cancellationToken))
             {
-                await foreach (TSource element in source.WithCancellation(cancellationToken))
+                if (predicate(element))
                 {
-                    if (predicate(element))
-                    {
-                        yield return element;
-                    }
+                    yield return element;
                 }
             }
         }

@@ -76,7 +76,7 @@ namespace System.Linq.Tests
 
             first = CreateSource(2, 4, 8, 16).Track();
             second = CreateSource(1, 3, 5).Track();
-            await ConsumeAsync(first.Concat(second));
+            await first.Concat(second).ConsumeAsync();
 
             Assert.Equal(5, first.MoveNextAsyncCount);
             Assert.Equal(4, first.CurrentCount);

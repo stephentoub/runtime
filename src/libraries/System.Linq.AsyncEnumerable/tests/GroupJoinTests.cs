@@ -63,82 +63,85 @@ namespace System.Linq.Tests
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupJoin(source, outer =>
-                {
-                    cts.Cancel();
-                    return outer;
-                },
-                inner =>
-                {
-                    return inner;
-                },
-                (outer, inner) =>
-                {
-                    return outer + inner.Sum();
-                }).WithCancellation(cts.Token));
+                await source.GroupJoin(source, outer =>
+                    {
+                        cts.Cancel();
+                        return outer;
+                    },
+                    inner =>
+                    {
+                        return inner;
+                    },
+                    (outer, inner) =>
+                    {
+                        return outer + inner.Sum();
+                    }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupJoin(source,
-                async (outer, ct) =>
-                {
-                    Assert.Equal(cts.Token, ct);
-                    await Task.Yield();
-                    cts.Cancel();
-                    return outer;
-                },
-                async (inner, ct) =>
-                {
-                    return inner;
-                },
-                async (outer, inner, ct) =>
-                {
-                    return outer + inner.Sum();
-                }).WithCancellation(cts.Token));
+                await source.GroupJoin(
+                    source,
+                    async (outer, ct) =>
+                    {
+                        Assert.Equal(cts.Token, ct);
+                        await Task.Yield();
+                        cts.Cancel();
+                        return outer;
+                    },
+                    async (inner, ct) =>
+                    {
+                        return inner;
+                    },
+                    async (outer, inner, ct) =>
+                    {
+                        return outer + inner.Sum();
+                    }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupJoin(source,
-                async (outer, ct) =>
-                {
-                    return outer;
-                },
-                async (inner, ct) =>
-                {
-                    Assert.Equal(cts.Token, ct);
-                    await Task.Yield();
-                    cts.Cancel();
-                    return inner;
-                },
-                async (outer, inner, ct) =>
-                {
-                    return outer + inner.Sum();
-                }).WithCancellation(cts.Token));
+                await source.GroupJoin(
+                    source,
+                    async (outer, ct) =>
+                    {
+                        return outer;
+                    },
+                    async (inner, ct) =>
+                    {
+                        Assert.Equal(cts.Token, ct);
+                        await Task.Yield();
+                        cts.Cancel();
+                        return inner;
+                    },
+                    async (outer, inner, ct) =>
+                    {
+                        return outer + inner.Sum();
+                    }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
                 CancellationTokenSource cts = new();
-                await ConsumeAsync(source.GroupJoin(source,
-                async (outer, ct) =>
-                {
-                    return outer;
-                },
-                async (inner, ct) =>
-                {
-                    return inner;
-                },
-                async (outer, inner, ct) =>
-                {
-                    Assert.Equal(cts.Token, ct);
-                    await Task.Yield();
-                    cts.Cancel();
-                    return outer + inner.Sum();
-                }).WithCancellation(cts.Token));
+                await source.GroupJoin(
+                    source,
+                    async (outer, ct) =>
+                    {
+                        return outer;
+                    },
+                    async (inner, ct) =>
+                    {
+                        return inner;
+                    },
+                    async (outer, inner, ct) =>
+                    {
+                        Assert.Equal(cts.Token, ct);
+                        await Task.Yield();
+                        cts.Cancel();
+                        return outer + inner.Sum();
+                    }).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 
@@ -149,7 +152,7 @@ namespace System.Linq.Tests
 
             outer = CreateSource(2, 4, 8, 16).Track();
             inner = CreateSource(1, 2, 3, 4).Track();
-            await ConsumeAsync(outer.GroupJoin(inner, outer => outer, inner => inner, (outer, inner) => outer + inner.Sum()));
+            await outer.GroupJoin(inner, outer => outer, inner => inner, (outer, inner) => outer + inner.Sum()).ConsumeAsync();
             Assert.Equal(5, outer.MoveNextAsyncCount);
             Assert.Equal(4, outer.CurrentCount);
             Assert.Equal(1, outer.DisposeAsyncCount);
@@ -159,7 +162,7 @@ namespace System.Linq.Tests
 
             outer = CreateSource(2, 4, 8, 16).Track();
             inner = CreateSource(1, 2, 3, 4).Track();
-            await ConsumeAsync(outer.GroupJoin(inner, async (outer, ct) => outer, async (inner, ct) => inner, async (outer, inner, ct) => outer + inner.Sum()));
+            await outer.GroupJoin(inner, async (outer, ct) => outer, async (inner, ct) => inner, async (outer, inner, ct) => outer + inner.Sum()).ConsumeAsync();
             Assert.Equal(5, outer.MoveNextAsyncCount);
             Assert.Equal(4, outer.CurrentCount);
             Assert.Equal(1, outer.DisposeAsyncCount);

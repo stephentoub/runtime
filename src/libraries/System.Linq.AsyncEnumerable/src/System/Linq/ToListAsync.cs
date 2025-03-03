@@ -22,6 +22,11 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.ToListAsync(cancellationToken);
+            }
+
             return Impl(source.WithCancellation(cancellationToken).ConfigureAwait(false));
 
             static async ValueTask<List<TSource>> Impl(

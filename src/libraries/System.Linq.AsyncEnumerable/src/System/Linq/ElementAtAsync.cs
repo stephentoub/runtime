@@ -24,6 +24,11 @@ namespace System.Linq
         {
             ThrowHelper.ThrowIfNull(source);
 
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.ElementAtAsync(index, cancellationToken);
+            }
+
             return ElementAtOrDefaultAsync(source, index, throwIfNotFound: true, cancellationToken)!;
         }
 
@@ -43,6 +48,11 @@ namespace System.Linq
             CancellationToken cancellationToken = default)
         {
             ThrowHelper.ThrowIfNull(source);
+
+            if (source is Iterator<TSource> iterator)
+            {
+                return iterator.ElementAtOrDefaultAsync(index, cancellationToken);
+            }
 
             return ElementAtOrDefaultAsync(source, index, throwIfNotFound: false, cancellationToken);
         }

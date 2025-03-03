@@ -57,7 +57,7 @@ namespace System.Linq.Tests
         public async Task InterfaceCalls_ExpectedCounts()
         {
             TrackingAsyncEnumerable<int> source = CreateSource(2, 4, 8, 16).Track();
-            await ConsumeAsync(source.Index());
+            await source.Index().ConsumeAsync();
             Assert.Equal(5, source.MoveNextAsyncCount);
             Assert.Equal(4, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);

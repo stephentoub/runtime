@@ -30,17 +30,42 @@ namespace System.Linq
 
             return
                 source.IsKnownEmpty() ? Empty<TResult>() :
-                Impl(source, selector, default);
+                source is Iterator<TSource> iterator ? iterator.Select(source, selector) :
+                new SelectIterator<TSource, TResult>(source, selector);
+        }
 
-            static async IAsyncEnumerable<TResult> Impl(
-                IAsyncEnumerable<TSource> source,
-                Func<TSource, TResult> selector,
-                [EnumeratorCancellation] CancellationToken cancellationToken)
+        private sealed class SelectIterator<TSource, TResult>(IAsyncEnumerable<TSource> source, Func<TSource, TResult> selector) : Iterator<TResult>
+        {
+            private readonly IAsyncEnumerable<TSource> _source = source;
+            private readonly Func<TSource, TResult> _selector = selector;
+
+            public override async IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken)
             {
-                await foreach (TSource element in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+                await foreach (TSource element in _source.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    yield return selector(element);
+                    yield return _selector(element);
                 }
+            }
+        }
+
+        /// <summary>Projects each element of a sequence into a new form.</summary>
+        /// <typeparam name="TSource">The type of the elements of source.</typeparam>
+        /// <typeparam name="TResult">The type of the value returned by selector.</typeparam>
+        /// <param name="source">A sequence of values to invoke a transform function on.</param>
+        /// <param name="selector">A transform function to apply to each element.</param>
+        /// <param name="cancellationToken">The <see cref="CancellationToken"/> to monitor for cancellation requests. The default is <see cref="CancellationToken.None"/>.</param>
+        /// <returns>
+        /// An <see cref="IAsyncEnumerable{T}"/> whose elements are the result of
+        /// invoking the transform function on each element of source.
+        /// </returns>
+        private static async IAsyncEnumerable<TResult> SelectEnumerable<TSource, TResult>(
+            IAsyncEnumerable<TSource> source,
+            Func<TSource, TResult> selector,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await foreach (TSource element in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                yield return selector(element);
             }
         }
 

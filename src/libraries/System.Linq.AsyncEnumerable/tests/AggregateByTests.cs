@@ -102,45 +102,45 @@ namespace System.Linq.Tests
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.AggregateBy(x =>
+                await source.AggregateBy(x =>
                 {
                     cts.Cancel();
                     return x;
-                }, 42, (x, y) => x + y).WithCancellation(cts.Token));
+                }, 42, (x, y) => x + y).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.AggregateBy(async (x, ct) =>
+                await source.AggregateBy(async (x, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return x;
-                }, 42, async (x, y, ct) => x + y).WithCancellation(cts.Token));
+                }, 42, async (x, y, ct) => x + y).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.AggregateBy(x =>
+                await source.AggregateBy(x =>
                 {
                     cts.Cancel();
                     return x;
-                }, x => x, (x, y) => x + y).WithCancellation(cts.Token));
+                }, x => x, (x, y) => x + y).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.AggregateBy(async (x, ct) =>
+                await source.AggregateBy(async (x, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return x;
-                }, async (x, ct) => x, async (x, y, ct) => x + y).WithCancellation(cts.Token));
+                }, async (x, ct) => x, async (x, y, ct) => x + y).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 

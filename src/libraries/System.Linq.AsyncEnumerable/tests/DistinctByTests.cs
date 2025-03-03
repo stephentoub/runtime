@@ -68,29 +68,29 @@ namespace System.Linq.Tests
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.DistinctBy(x => x).WithCancellation(new CancellationToken(true)));
+                await source.DistinctBy(x => x).WithCancellation(new CancellationToken(true)).ConsumeAsync();
             });
 
             CancellationTokenSource cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.DistinctBy(x =>
+                await source.DistinctBy(x =>
                 {
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
 
             cts = new();
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
             {
-                await ConsumeAsync(source.DistinctBy(async (x, ct) =>
+                await source.DistinctBy(async (x, ct) =>
                 {
                     Assert.Equal(cts.Token, ct);
                     await Task.Yield();
                     cts.Cancel();
                     return x;
-                }).WithCancellation(cts.Token));
+                }).WithCancellation(cts.Token).ConsumeAsync();
             });
         }
 
@@ -103,7 +103,7 @@ namespace System.Linq.Tests
             int funcCount;
 
             funcCount = 0;
-            await ConsumeAsync(useAsync ?
+            await (useAsync ?
                 source.DistinctBy(x =>
                 {
                     funcCount++;
@@ -113,7 +113,7 @@ namespace System.Linq.Tests
                 {
                     funcCount++;
                     return x;
-                }));
+                })).ConsumeAsync();
             Assert.Equal(5, source.MoveNextAsyncCount);
             Assert.Equal(4, source.CurrentCount);
             Assert.Equal(1, source.DisposeAsyncCount);
