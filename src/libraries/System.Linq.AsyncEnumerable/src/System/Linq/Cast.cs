@@ -6,38 +6,41 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
+// TODO: Compiler currently fails when putting XML comment on extension type
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+
 namespace System.Linq
 {
     public static partial class AsyncEnumerable
     {
-        // TODO https://github.com/dotnet/runtime/issues/111717:
-        // Consider before shipping .NET 10 whether this can instead use extension everything to support any IAsyncEnumerable<T> source.
-        // Right now it's limited because you can't cast an IAsyncEnumerable<TValueType> to IAsyncEnumerable<object>. But the method with this
-        // shape is necessary to support query comprehensions with explicit types, e.g. `from string s in asyncEnumerable`.
-
-        /// <summary>
-        /// Casts the elements of an <see cref="IAsyncEnumerable{Object}"/> to the specified type.
-        /// </summary>
-        /// <typeparam name="TResult">The type to cast the elements of source to.</typeparam>
-        /// <param name="source">The <see cref="IAsyncEnumerable{Object}"/> that contains the elements to be cast to type <typeparamref name="TResult"/>.</param>
-        /// <returns>An <see cref="IAsyncEnumerable{TResult}"/> that contains each element of the source sequence cast to the <typeparamref name="TResult"/> type.</returns>
-        public static IAsyncEnumerable<TResult> Cast<TResult>( // satisfies the C# query-expression pattern
-            this IAsyncEnumerable<object?> source)
+        extension<TSource>(IAsyncEnumerable<TSource> source)
         {
-            ArgumentNullException.ThrowIfNull(source);
-
-            return
-                source.IsKnownEmpty() ? Empty<TResult>() :
-                source as IAsyncEnumerable<TResult> ??
-                Impl(source, default);
-
-            static async IAsyncEnumerable<TResult> Impl(
-                IAsyncEnumerable<object?> source,
-                [EnumeratorCancellation] CancellationToken cancellationToken)
+            /// <summary>
+            /// Casts the elements of an <see cref="IAsyncEnumerable{TSource}"/> to the specified <typeparamref name="TResult"/> type.
+            /// </summary>
+            /// <typeparam name="TResult">The type to cast the elements of the source to.</typeparam>
+            /// <returns>An <see cref="IAsyncEnumerable{TResult}"/> that contains each element of the source sequence cast to the <typeparamref name="TResult"/> type.</returns>
+            public IAsyncEnumerable<
+#nullable disable // there's no way to annotate the connection of the nullability of TResult to that of TSource
+                TResult
+#nullable restore
+                > Cast<TResult>() // satisfies the C# query-expression pattern
             {
-                await foreach (object? item in source.WithCancellation(cancellationToken))
+                ArgumentNullException.ThrowIfNull(source);
+
+                return
+                    source.IsKnownEmpty() ? Empty<TResult>() :
+                    source as IAsyncEnumerable<TResult> ??
+                    Impl(source, default);
+
+                static async IAsyncEnumerable<TResult> Impl(
+                    IAsyncEnumerable<TSource> source,
+                    [EnumeratorCancellation] CancellationToken cancellationToken)
                 {
-                    yield return (TResult)item!;
+                    await foreach (TSource item in source.WithCancellation(cancellationToken))
+                    {
+                        yield return (TResult)(object)item!;
+                    }
                 }
             }
         }

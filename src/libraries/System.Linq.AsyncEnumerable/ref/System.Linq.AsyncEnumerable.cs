@@ -8,6 +8,14 @@ namespace System.Linq
 {
     public static partial class AsyncEnumerable
     {
+        extension<TSource>(System.Collections.Generic.IAsyncEnumerable<TSource> source)
+        {
+            public System.Collections.Generic.IAsyncEnumerable<
+#nullable disable
+                TResult
+#nullable restore
+                > Cast<TResult>() { throw null; }
+        }
         public static System.Threading.Tasks.ValueTask<TSource> AggregateAsync<TSource>(this System.Collections.Generic.IAsyncEnumerable<TSource> source, System.Func<TSource, TSource, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<TSource>> func, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         public static System.Threading.Tasks.ValueTask<TSource> AggregateAsync<TSource>(this System.Collections.Generic.IAsyncEnumerable<TSource> source, System.Func<TSource, TSource, TSource> func, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         public static System.Threading.Tasks.ValueTask<TAccumulate> AggregateAsync<TSource, TAccumulate>(this System.Collections.Generic.IAsyncEnumerable<TSource> source, TAccumulate seed, System.Func<TAccumulate, TSource, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<TAccumulate>> func, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
@@ -34,7 +42,6 @@ namespace System.Linq
         public static System.Threading.Tasks.ValueTask<double?> AverageAsync(this System.Collections.Generic.IAsyncEnumerable<long?> source, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         public static System.Threading.Tasks.ValueTask<float?> AverageAsync(this System.Collections.Generic.IAsyncEnumerable<float?> source, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         public static System.Threading.Tasks.ValueTask<float> AverageAsync(this System.Collections.Generic.IAsyncEnumerable<float> source, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
-        public static System.Collections.Generic.IAsyncEnumerable<TResult> Cast<TResult>(this System.Collections.Generic.IAsyncEnumerable<object?> source) { throw null; }
         public static System.Collections.Generic.IAsyncEnumerable<TSource[]> Chunk<TSource>(this System.Collections.Generic.IAsyncEnumerable<TSource> source, int size) { throw null; }
         public static System.Collections.Generic.IAsyncEnumerable<TSource> Concat<TSource>(this System.Collections.Generic.IAsyncEnumerable<TSource> first, System.Collections.Generic.IAsyncEnumerable<TSource> second) { throw null; }
         public static System.Threading.Tasks.ValueTask<bool> ContainsAsync<TSource>(this System.Collections.Generic.IAsyncEnumerable<TSource> source, TSource value, System.Collections.Generic.IEqualityComparer<TSource>? comparer = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
