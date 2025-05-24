@@ -16,15 +16,19 @@ namespace System.Threading.Channels
     {
         /// <summary>Task that indicates the channel has completed.</summary>
         private readonly TaskCompletionSource _completion;
+
         /// <summary>The items in the channel.</summary>
         private readonly ConcurrentQueue<T> _items = new ConcurrentQueue<T>();
+
         /// <summary>Readers blocked reading from the channel.</summary>
-        private readonly Deque<AsyncOperation<T>> _blockedReaders = new Deque<AsyncOperation<T>>();
+        private readonly AsyncOperationQueue<T> _blockedReaders;
+
         /// <summary>Whether to force continuations to be executed asynchronously from producer writes.</summary>
         private readonly bool _runContinuationsAsynchronously;
 
         /// <summary>Readers waiting for a notification that data is available.</summary>
         private AsyncOperation<bool>? _waitingReadersTail;
+
         /// <summary>Set to non-null once Complete has been called.</summary>
         private Exception? _doneWriting;
 
@@ -33,6 +37,9 @@ namespace System.Threading.Channels
         {
             _runContinuationsAsynchronously = runContinuationsAsynchronously;
             _completion = new TaskCompletionSource(runContinuationsAsynchronously ? TaskCreationOptions.RunContinuationsAsynchronously : TaskCreationOptions.None);
+
+            _blockedReaders = new(SyncObj);
+
             Reader = new UnboundedChannelReader(this);
             Writer = new UnboundedChannelWriter(this);
         }
@@ -98,14 +105,14 @@ namespace System.Threading.Channels
                         AsyncOperation<T> singleton = _readerSingleton;
                         if (singleton.TryOwnAndReset())
                         {
-                            parent._blockedReaders.EnqueueTail(singleton);
+                            parent._blockedReaders.Enqueue(singleton);
                             return singleton.ValueTaskOfT;
                         }
                     }
 
                     // Otherwise, create and queue a reader.
                     var reader = new AsyncOperation<T>(parent._runContinuationsAsynchronously, cancellationToken);
-                    parent._blockedReaders.EnqueueTail(reader);
+                    parent._blockedReaders.Enqueue(reader);
                     return reader.ValueTaskOfT;
                 }
             }
@@ -231,7 +238,7 @@ namespace System.Threading.Channels
                 // At this point, _blockedReaders and _waitingReaders will not be mutated:
                 // they're only mutated by readers while holding the lock, and only if _doneWriting is null.
                 // freely manipulate _blockedReaders and _waitingReaders without any concurrency concerns.
-                ChannelUtilities.FailOperations<AsyncOperation<T>, T>(parent._blockedReaders, ChannelUtilities.CreateInvalidCompletionException(error));
+                ChannelUtilities.FailOperations(parent._blockedReaders, ChannelUtilities.CreateInvalidCompletionException(error));
                 ChannelUtilities.WakeUpWaiters(ref parent._waitingReadersTail, result: false, error: error);
 
                 // Successfully transitioned to completed.
@@ -260,7 +267,7 @@ namespace System.Threading.Channels
                         // continuations asynchronously (otherwise the synchronous continuations
                         // could be invoked under the lock).  If we don't complete them here, we
                         // need to do so outside of the lock.
-                        if (parent._blockedReaders.IsEmpty)
+                        if (!parent._blockedReaders.TryDequeue(out blockedReader))
                         {
                             parent._items.Enqueue(item);
                             waitingReadersTail = parent._waitingReadersTail;
@@ -269,11 +276,6 @@ namespace System.Threading.Channels
                                 return true;
                             }
                             parent._waitingReadersTail = null;
-                        }
-                        else
-                        {
-                            // There were blocked readers.  Grab one, and then complete it outside of the lock.
-                            blockedReader = parent._blockedReaders.DequeueHead();
                         }
                     }
 

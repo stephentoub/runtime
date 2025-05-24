@@ -31,6 +31,22 @@ namespace System.Threading.Channels
         /// <summary>Throws an exception indicating that the operation was used after it was supposed to be used.</summary>
         protected static void ThrowIncorrectCurrentIdException() =>
             throw new InvalidOperationException(SR.InvalidOperation_IncorrectToken);
+
+        /// <summary>A tuple of both a non-null scheduler and a non-null ExecutionContext.</summary>
+        private protected sealed class CapturedSchedulerAndExecutionContext
+        {
+            internal readonly object _scheduler;
+            internal readonly ExecutionContext _executionContext;
+
+            public CapturedSchedulerAndExecutionContext(object scheduler, ExecutionContext executionContext)
+            {
+                Debug.Assert(scheduler is SynchronizationContext or TaskScheduler, $"{nameof(scheduler)} is {scheduler}");
+                Debug.Assert(executionContext is not null, $"{nameof(executionContext)} is null");
+
+                _scheduler = scheduler;
+                _executionContext = executionContext;
+            }
+        }
     }
 
     /// <summary>The representation of an asynchronous operation that has a result value.</summary>
@@ -39,6 +55,7 @@ namespace System.Threading.Channels
     {
         /// <summary>Registration with a provided cancellation token.</summary>
         private readonly CancellationTokenRegistration _registration;
+
         /// <summary>true if this object is pooled and reused; otherwise, false.</summary>
         /// <remarks>
         /// If the operation is cancelable, then it can't be pooled.  And if it's poolable, there must never be race conditions to complete it,
@@ -46,15 +63,25 @@ namespace System.Threading.Channels
         /// and then we may end up trying to complete an object that's used by someone else.
         /// </remarks>
         private readonly bool _pooled;
+
         /// <summary>Whether continuations should be forced to run asynchronously.</summary>
         private readonly bool _runContinuationsAsynchronously;
 
         /// <summary>Only relevant to cancelable operations; 0 if the operation hasn't had completion reserved, 1 if it has.</summary>
-        private volatile int _completionReserved;
+        private volatile
+#if NET9_0_OR_GREATER
+            bool
+#else
+            int
+#endif
+            _completionReserved;
+
         /// <summary>The result of the operation.</summary>
         private TResult? _result;
+
         /// <summary>Any error that occurred during the operation.</summary>
         private ExceptionDispatchInfo? _error;
+
         /// <summary>The continuation callback.</summary>
         /// <remarks>
         /// This may be the completion sentinel if the operation has already completed.
@@ -63,12 +90,19 @@ namespace System.Threading.Channels
         /// This may be another callback if the operation has had a callback hooked up with OnCompleted.
         /// </remarks>
         private Action<object?>? _continuation;
+
         /// <summary>State object to be passed to <see cref="_continuation"/>.</summary>
         private object? _continuationState;
-        /// <summary>Scheduling context (a <see cref="SynchronizationContext"/> or <see cref="TaskScheduler"/>) to which to queue the continuation. May be null.</summary>
-        private object? _schedulingContext;
-        /// <summary>Execution context to use when invoking <see cref="_continuation"/>. May be null.</summary>
-        private ExecutionContext? _executionContext;
+
+        /// <summary>
+        /// Null if no special context was found.
+        /// ExecutionContext if one was captured due to needing to be flowed.
+        /// A scheduler (TaskScheduler or SynchronizationContext) if one was captured and needs to be used for callback scheduling.
+        /// Or a CapturedSchedulerAndExecutionContext if there's both an ExecutionContext and a scheduler.
+        /// The most common and the fast path case to optimize for is null.
+        /// </summary>
+        private object? _capturedContext;
+
         /// <summary>The token value associated with the current operation.</summary>
         /// <remarks>
         /// IValueTaskSource operations on this instance are only valid if the provided token matches this value,
@@ -88,21 +122,61 @@ namespace System.Threading.Channels
             if (cancellationToken.CanBeCanceled)
             {
                 Debug.Assert(!_pooled, "Cancelable operations can't be pooled");
+#if NET
+                _registration =
+                    cancellationToken.UnsafeRegister(static (s, cancellationToken) =>
+                    {
+                        var thisRef = (AsyncOperation<TResult>)s!;
+#else
                 CancellationToken = cancellationToken;
-                _registration = UnsafeRegister(cancellationToken, static s =>
-                {
-                    var thisRef = (AsyncOperation<TResult>)s!;
-                    thisRef.TrySetCanceled(thisRef.CancellationToken);
-                }, this);
+                _registration =
+                    cancellationToken.Register(static s =>
+                    {
+                        var thisRef = (AsyncOperation<TResult>)s!;
+                        var cancellationToken = thisRef.CancellationToken;
+#endif
+                        if (thisRef.TrySetCanceled(cancellationToken))
+                        {
+                            // It's possible the operation could be removed from the parent list
+                            // in the interim. It's ok to do a dirty read to access the parent. If we
+                            // can get it, we'll then synchronize and try to remove the instance; if it's
+                            // not still there, it's just a nop. This would be an issue if instances
+                            // could be reused, but we already disallow pooled objects from being used
+                            // when cancelable.
+                            AsyncOperationQueue<TResult>? parent = thisRef.Parent;
+                            object? syncObj = parent?.SyncObj;
+                            if (syncObj is not null)
+                            {
+                                lock (syncObj)
+                                {
+                                    parent!.Remove(thisRef);
+                                }
+                            }
+                        }
+                    }, this);
             }
         }
 
+        /// <summary>Gets or sets the parent queue currently holding this operation.</summary>
+        public AsyncOperationQueue<TResult>? Parent { get; set; }
+
         /// <summary>Gets or sets the next operation in the linked list of operations.</summary>
         public AsyncOperation<TResult>? Next { get; set; }
+
+        /// <summary>Gets or sets the previous operation in the linked list of operations.</summary>
+        public AsyncOperation<TResult>? Previous { get; set; }
+
         /// <summary>Gets the cancellation token associated with this operation.</summary>
-        public CancellationToken CancellationToken { get; }
+        public CancellationToken CancellationToken
+#if NET
+            => _registration.Token;
+#else
+            { get; }
+#endif
+
         /// <summary>Gets a <see cref="ValueTask"/> backed by this instance and its current token.</summary>
         public ValueTask ValueTask => new ValueTask(this, _currentId);
+
         /// <summary>Gets a <see cref="ValueTask{TResult}"/> backed by this instance and its current token.</summary>
         public ValueTask<TResult> ValueTaskOfT => new ValueTask<TResult>(this, _currentId);
 
@@ -117,7 +191,7 @@ namespace System.Threading.Channels
 
             return
                 !IsCompleted ? ValueTaskSourceStatus.Pending :
-                _error == null ? ValueTaskSourceStatus.Succeeded :
+                _error is null ? ValueTaskSourceStatus.Succeeded :
                 _error.SourceException is OperationCanceledException ? ValueTaskSourceStatus.Canceled :
                 ValueTaskSourceStatus.Faulted;
         }
@@ -187,8 +261,7 @@ namespace System.Threading.Channels
                 _continuationState = null;
                 _result = default;
                 _error = null;
-                _schedulingContext = null;
-                _executionContext = null;
+                _capturedContext = null;
                 return true;
             }
 
@@ -211,29 +284,30 @@ namespace System.Threading.Channels
             // after the CompareExchange, it'll find the state already stored.  If someone misuses this
             // and schedules multiple continuations erroneously, we could end up using the wrong state.
             // Make a best-effort attempt to catch such misuse.
-            if (_continuationState != null)
+            if (_continuationState is not null)
             {
                 ThrowMultipleContinuations();
             }
             _continuationState = state;
 
             // Capture the execution context if necessary.
-            Debug.Assert(_executionContext == null);
+            Debug.Assert(_capturedContext is null);
             if ((flags & ValueTaskSourceOnCompletedFlags.FlowExecutionContext) != 0)
             {
-                _executionContext = ExecutionContext.Capture();
+                _capturedContext = ExecutionContext.Capture();
             }
 
             // Capture the scheduling context if necessary.
-            Debug.Assert(_schedulingContext == null);
             SynchronizationContext? sc = null;
             TaskScheduler? ts = null;
             if ((flags & ValueTaskSourceOnCompletedFlags.UseSchedulingContext) != 0)
             {
                 sc = SynchronizationContext.Current;
-                if (sc != null && sc.GetType() != typeof(SynchronizationContext))
+                if (sc is not null && sc.GetType() != typeof(SynchronizationContext))
                 {
-                    _schedulingContext = sc;
+                    _capturedContext = _capturedContext is null ?
+                        sc :
+                        new CapturedSchedulerAndExecutionContext(sc, (ExecutionContext)_capturedContext);
                 }
                 else
                 {
@@ -241,7 +315,13 @@ namespace System.Threading.Channels
                     ts = TaskScheduler.Current;
                     if (ts != TaskScheduler.Default)
                     {
-                        _schedulingContext = ts;
+                        _capturedContext = _capturedContext is null ?
+                            ts :
+                            new CapturedSchedulerAndExecutionContext(ts, (ExecutionContext)_capturedContext);
+                    }
+                    else
+                    {
+                        ts = null;
                     }
                 }
             }
@@ -252,7 +332,7 @@ namespace System.Threading.Channels
             // inside the awaiter's OnCompleted method and we want to avoid possible stack dives, we must invoke
             // the continuation asynchronously rather than synchronously.
             Action<object?>? prevContinuation = Interlocked.CompareExchange(ref _continuation, continuation, null);
-            if (prevContinuation != null)
+            if (prevContinuation is not null)
             {
                 // If the set failed because there's already a delegate in _continuation, but that delegate is
                 // something other than s_completedSentinel, something went wrong, which should only happen if
@@ -267,18 +347,11 @@ namespace System.Threading.Channels
                 // Queue the continuation.  We always queue here, even if !RunContinuationsAsynchronously, in order
                 // to avoid stack diving; this path happens in the rare race when we're setting up to await and the
                 // object is completed after the awaiter.IsCompleted but before the awaiter.OnCompleted.
-                if (_schedulingContext == null)
+                if (_capturedContext is null)
                 {
-                    if (_executionContext == null)
-                    {
-                        UnsafeQueueUserWorkItem(continuation, state);
-                    }
-                    else
-                    {
-                        QueueUserWorkItem(continuation, state);
-                    }
+                    UnsafeQueueUserWorkItem(continuation, state);
                 }
-                else if (sc != null)
+                else if (sc is not null)
                 {
                     sc.Post(static s =>
                     {
@@ -286,10 +359,15 @@ namespace System.Threading.Channels
                         t.Key(t.Value);
                     }, new KeyValuePair<Action<object?>, object?>(continuation, state));
                 }
+                else if (ts is not null)
+                {
+                    Debug.Assert(ts is not null);
+                    Task.Factory.StartNew(continuation, state, CancellationToken.None, TaskCreationOptions.DenyChildAttach, ts);
+                }
                 else
                 {
-                    Debug.Assert(ts != null);
-                    Task.Factory.StartNew(continuation, state, CancellationToken.None, TaskCreationOptions.DenyChildAttach, ts);
+                    Debug.Assert(_capturedContext is ExecutionContext);
+                    QueueUserWorkItem(continuation, state);
                 }
             }
         }
@@ -311,7 +389,12 @@ namespace System.Threading.Channels
             if (CancellationToken.CanBeCanceled)
             {
                 _registration.Dispose(); // Dispose rather than Unregister is important to know work has quiesced
-                return _completionReserved == 0;
+                return _completionReserved ==
+#if NET9_0_OR_GREATER
+                    false;
+#else
+                    0;
+#endif
             }
 
             Debug.Assert(_registration == default);
@@ -357,6 +440,8 @@ namespace System.Threading.Channels
         /// <returns>true if the operation could be successfully transitioned to a completed state; false if it was already completed.</returns>
         public bool TrySetCanceled(CancellationToken cancellationToken = default)
         {
+            UnregisterCancellation();
+
             if (TryReserveCompletionIfCancelable())
             {
                 _error = ExceptionDispatchInfo.Capture(new OperationCanceledException(cancellationToken));
@@ -375,17 +460,23 @@ namespace System.Threading.Channels
         /// </remarks>
         private bool TryReserveCompletionIfCancelable() =>
             !CancellationToken.CanBeCanceled ||
-            Interlocked.CompareExchange(ref _completionReserved, 1, 0) == 0;
+            Interlocked.CompareExchange(ref _completionReserved,
+#if NET9_0_OR_GREATER
+                true, false) == false;
+#else
+                1, 0) == 0;
+#endif
 
         /// <summary>Signals to a registered continuation that the operation has now completed.</summary>
         private void SignalCompletion()
         {
-            if (_continuation != null || Interlocked.CompareExchange(ref _continuation, s_completedSentinel, null) != null)
+            if (_continuation is not null || Interlocked.CompareExchange(ref _continuation, s_completedSentinel, null) is not null)
             {
                 Debug.Assert(_continuation != s_completedSentinel, $"The continuation was the completion sentinel.");
                 Debug.Assert(_continuation != s_availableSentinel, $"The continuation was the available sentinel.");
 
-                if (_schedulingContext == null)
+                object? ctx = _capturedContext;
+                if (ctx is null || ctx is ExecutionContext)
                 {
                     // There's no captured scheduling context.  If we're forced to run continuations asynchronously, queue it.
                     // Otherwise fall through to invoke it synchronously.
@@ -395,29 +486,37 @@ namespace System.Threading.Channels
                         return;
                     }
                 }
-                else if (_schedulingContext is SynchronizationContext sc)
-                {
-                    // There's a captured synchronization context.  If we're forced to run continuations asynchronously,
-                    // or if there's a current synchronization context that's not the one we're targeting, queue it.
-                    // Otherwise fall through to invoke it synchronously.
-                    if (_runContinuationsAsynchronously || sc != SynchronizationContext.Current)
-                    {
-                        sc.Post(static s => ((AsyncOperation<TResult>)s!).SetCompletionAndInvokeContinuation(), this);
-                        return;
-                    }
-                }
                 else
                 {
-                    // There's a captured TaskScheduler.  If we're forced to run continuations asynchronously,
-                    // or if there's a current scheduler that's not the one we're targeting, queue it.
-                    // Otherwise fall through to invoke it synchronously.
-                    TaskScheduler ts = (TaskScheduler)_schedulingContext;
-                    Debug.Assert(ts != null, "Expected a TaskScheduler");
-                    if (_runContinuationsAsynchronously || ts != TaskScheduler.Current)
+                    SynchronizationContext? sc =
+                        ctx as SynchronizationContext ??
+                        (ctx as CapturedSchedulerAndExecutionContext)?._scheduler as SynchronizationContext;
+                    if (sc is not null)
                     {
-                        Task.Factory.StartNew(static s => ((AsyncOperation<TResult>)s!).SetCompletionAndInvokeContinuation(), this,
-                            CancellationToken.None, TaskCreationOptions.DenyChildAttach, ts);
-                        return;
+                        // There's a captured synchronization context.  If we're forced to run continuations asynchronously,
+                        // or if there's a current synchronization context that's not the one we're targeting, queue it.
+                        // Otherwise fall through to invoke it synchronously.
+                        if (_runContinuationsAsynchronously || sc != SynchronizationContext.Current)
+                        {
+                            sc.Post(static s => ((AsyncOperation<TResult>)s!).SetCompletionAndInvokeContinuation(), this);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // There's a captured TaskScheduler.  If we're forced to run continuations asynchronously,
+                        // or if there's a current scheduler that's not the one we're targeting, queue it.
+                        // Otherwise fall through to invoke it synchronously.
+                        TaskScheduler? ts =
+                            ctx as TaskScheduler ??
+                            (ctx as CapturedSchedulerAndExecutionContext)?._scheduler as TaskScheduler;
+                        Debug.Assert(ts is not null, "Expected a TaskScheduler");
+                        if (_runContinuationsAsynchronously || ts != TaskScheduler.Current)
+                        {
+                            Task.Factory.StartNew(static s => ((AsyncOperation<TResult>)s!).SetCompletionAndInvokeContinuation(), this,
+                                CancellationToken.None, TaskCreationOptions.DenyChildAttach, ts);
+                            return;
+                        }
                     }
                 }
 
@@ -428,7 +527,13 @@ namespace System.Threading.Channels
 
         private void SetCompletionAndInvokeContinuation()
         {
-            if (_executionContext == null)
+            object? ctx = _capturedContext;
+            ExecutionContext? ec =
+                ctx is null ? null :
+                ctx as ExecutionContext ??
+                (ctx as CapturedSchedulerAndExecutionContext)?._executionContext;
+
+            if (ec is null)
             {
                 Action<object?> c = _continuation!;
                 _continuation = s_completedSentinel;
@@ -436,7 +541,7 @@ namespace System.Threading.Channels
             }
             else
             {
-                ExecutionContext.Run(_executionContext, static s =>
+                ExecutionContext.Run(ec, static s =>
                 {
                     var thisRef = (AsyncOperation<TResult>)s!;
                     Action<object?> c = thisRef._continuation!;

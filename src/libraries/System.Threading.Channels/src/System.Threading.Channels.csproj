@@ -12,6 +12,7 @@ System.Threading.Channel&lt;T&gt;</PackageDescription>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="System\Threading\Channels\AsyncOperationQueue.cs" />
     <Compile Include="System\VoidResult.cs" />
     <Compile Include="System\Threading\Channels\AsyncOperation.cs" />
     <Compile Include="System\Threading\Channels\BoundedChannel.cs" />
