@@ -8224,6 +8224,7 @@ namespace System.Collections.Generic
         int GetHashCode(TAlternate alternate);
         T Create(TAlternate alternate);
     }
+    [System.Runtime.CompilerServices.CollectionBuilderAttribute(typeof(System.Runtime.CompilerServices.AsyncIteratorMethodBuilder), "CreateAsyncEnumerable")]
     public partial interface IAsyncEnumerable<out T> where T : allows ref struct
     {
         System.Collections.Generic.IAsyncEnumerator<T> GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
@@ -13104,6 +13105,7 @@ namespace System.Runtime.CompilerServices
         public void AwaitOnCompleted<TAwaiter, TStateMachine>(ref TAwaiter awaiter, ref TStateMachine stateMachine) where TAwaiter : System.Runtime.CompilerServices.INotifyCompletion where TStateMachine : System.Runtime.CompilerServices.IAsyncStateMachine { }
         public void AwaitUnsafeOnCompleted<TAwaiter, TStateMachine>(ref TAwaiter awaiter, ref TStateMachine stateMachine) where TAwaiter : System.Runtime.CompilerServices.ICriticalNotifyCompletion where TStateMachine : System.Runtime.CompilerServices.IAsyncStateMachine { }
         public void Complete() { }
+        public static System.Collections.Generic.IAsyncEnumerable<T> CreateAsyncEnumerable<T>(params System.ReadOnlySpan<T> values) { throw null; }
         public static System.Runtime.CompilerServices.AsyncIteratorMethodBuilder Create() { throw null; }
         public void MoveNext<TStateMachine>(ref TStateMachine stateMachine) where TStateMachine : System.Runtime.CompilerServices.IAsyncStateMachine { }
     }

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -84,5 +85,46 @@ namespace System.Runtime.CompilerServices
 
         /// <summary>Gets an object that may be used to uniquely identify this builder to the debugger.</summary>
         internal object ObjectIdForDebugger => m_task ??= AsyncTaskMethodBuilder<VoidTaskResult>.CreateWeaklyTypedStateMachineBox();
+
+        /// <summary>Creates an <see cref="IAsyncEnumerable{T}"/> that will enumerate the specified sequence of <paramref name="values"/>.</summary>
+        /// <typeparam name="T">Specifies the type of values in the sequence.</typeparam>
+        /// <param name="values">The sequence of values to encapsulate in the enumerable.</param>
+        /// <returns>An <see cref="IAsyncEnumerable{T}"/> that will enumerate the specified sequence of <paramref name="values"/>.</returns>
+        public static IAsyncEnumerable<T> CreateAsyncEnumerable<T>(params ReadOnlySpan<T> values)
+        {
+            return values.IsEmpty ?
+                EmptyAsyncEnumerable<T>.Instance :
+                CreateAsyncEnumerable(values.ToArray());
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+            static async IAsyncEnumerable<T> CreateAsyncEnumerable(T[] values)
+#pragma warning restore CS1998
+            {
+                for (int i = 0; i < values.Length; i++)
+                {
+                    yield return values[i];
+                }
+            }
+        }
+
+        private sealed class EmptyAsyncEnumerable<T> : IAsyncEnumerable<T>, IAsyncEnumerator<T>
+        {
+            public static readonly EmptyAsyncEnumerable<T> Instance = new EmptyAsyncEnumerable<T>();
+
+            public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
+
+            public ValueTask DisposeAsync() => default;
+
+            public ValueTask<bool> MoveNextAsync() => new ValueTask<bool>(false);
+
+            public T Current
+            {
+                get
+                {
+                    ThrowHelper.ThrowInvalidOperationException_EnumCurrent(0);
+                    return default!;
+                }
+            }
+        }
     }
 }

@@ -24,6 +24,9 @@ namespace System.Linq.Tests
 
             yield return items.ToAsyncEnumerable();
             yield return items.ToAsyncEnumerable().Yield();
+#if NET10_0_OR_GREATER
+            yield return [.. items];
+#endif
         }
 
         protected static async Task ConsumeAsync<T>(IAsyncEnumerable<T> source)

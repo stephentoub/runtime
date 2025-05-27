@@ -1,12 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace System.Collections.Generic
 {
     /// <summary>Exposes an enumerator that provides asynchronous iteration over values of a specified type.</summary>
     /// <typeparam name="T">The type of values to enumerate.</typeparam>
+#if NET10_0_OR_GREATER
+    [CollectionBuilder(typeof(AsyncIteratorMethodBuilder), nameof(AsyncIteratorMethodBuilder.CreateAsyncEnumerable))]
+#endif
     public interface IAsyncEnumerable<out T>
 #if NET9_0_OR_GREATER
         where T : allows ref struct

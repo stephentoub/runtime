@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,10 +15,14 @@ namespace System.Linq
         /// </summary>
         /// <typeparam name="TResult">The type of the elements of the sequence.</typeparam>
         /// <returns>An empty <see cref="IAsyncEnumerable{T}"/> whose type argument is <typeparamref name="TResult"/>.</returns>
-        public static IAsyncEnumerable<TResult> Empty<TResult>() => EmptyAsyncEnumerable<TResult>.Instance;
+        public static IAsyncEnumerable<TResult> Empty<TResult>() =>
+            EmptyAsyncEnumerable<TResult>.Instance;
 
         /// <summary>Determines whether <paramref name="source"/> is known to be an always-empty enumerable.</summary>
         private static bool IsKnownEmpty<TResult>(this IAsyncEnumerable<TResult> source) =>
+#if NET10_0_OR_GREATER
+            ReferenceEquals(source, AsyncIteratorMethodBuilder.CreateAsyncEnumerable<TResult>(default)) |
+#endif
             ReferenceEquals(source, EmptyAsyncEnumerable<TResult>.Instance);
 
         private sealed class EmptyAsyncEnumerable<TResult> :
