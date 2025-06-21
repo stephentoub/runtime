@@ -144,6 +144,132 @@ namespace System
             return result;
         }
 
+        public virtual T NextInteger<T>() where T : IBinaryInteger<T>, IMinMaxValue<T>
+        {
+            if (typeof(T) == typeof(int) ||
+                (typeof(T) == typeof(nint) && IntPtr.Size == 4))
+            {
+                return (T)(object)T.CreateTruncating(Next());
+            }
+
+            if (typeof(T) == typeof(long) ||
+                (typeof(T) == typeof(nint) && IntPtr.Size == 8))
+            {
+                return (T)(object)T.CreateTruncating(NextInt64());
+            }
+
+            return NextInteger(T.MaxValue);
+        }
+
+        public virtual T NextInteger<T>(T maxValue) where T : IBinaryInteger<T>
+        {
+            if (typeof(T) == typeof(byte))
+            {
+                return (T)(object)(byte)Next((byte)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(sbyte))
+            {
+                return (T)(object)(sbyte)Next((sbyte)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(ushort))
+            {
+                return (T)(object)(ushort)Next((ushort)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(char))
+            {
+                return (T)(object)(char)Next((char)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(short))
+            {
+                return (T)(object)(short)Next((short)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(uint))
+            {
+                return (T)(object)(uint)NextInt64((uint)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(nuint) && IntPtr.Size == 4)
+            {
+                return (T)(object)(nuint)NextInt64(long.CreateTruncating(maxValue));
+            }
+
+            if (typeof(T) == typeof(int) ||
+                (typeof(T) == typeof(nint) && IntPtr.Size == 4))
+            {
+                return (T)(object)Next(int.CreateTruncating(maxValue));
+            }
+
+            if (typeof(T) == typeof(long) ||
+                (typeof(T) == typeof(nint) && IntPtr.Size == 8))
+            {
+                return (T)(object)NextInt64(long.CreateTruncating(maxValue));
+            }
+
+            ArgumentOutOfRangeException.ThrowIfNegative(maxValue);
+
+            if (T.IsZero(maxValue))
+            {
+                return T.Zero;
+            }
+
+            int maxBytes = (int)Math.Ceiling(maxValue.GetShortestBitLength() / 8.0);
+
+            const int MaxStackallocBytes = 256;
+            byte[]? arrayPoolArray = null;
+            Span<byte> span = maxBytes <= MaxStackallocBytes ?
+                stackalloc byte[MaxStackallocBytes] :
+                arrayPoolArray = ArrayPool<byte>.Shared.Rent(maxBytes);
+            span = span.Slice(0, maxBytes);
+
+            try
+            {
+                while (true)
+                {
+                    Random.Shared.NextBytes(span);
+                    T newValue = T.ReadLittleEndian(span, isUnsigned: true);
+                    if (newValue < maxValue)
+                    {
+                        return newValue;
+                    }
+                }
+            }
+            finally
+            {
+                if (arrayPoolArray is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(arrayPoolArray);
+                }
+            }
+        }
+
+        public virtual T NextInteger<T>(T minValue, T maxValue) where T : IBinaryInteger<T>
+        {
+            if (typeof(T) == typeof(int))
+            {
+                return (T)(object)Next((int)(object)minValue, (int)(object)maxValue);
+            }
+
+            if (typeof(T) == typeof(long))
+            {
+                return (T)(object)NextInt64((long)(object)minValue, (long)(object)maxValue);
+            }
+
+            if (minValue > maxValue)
+            {
+                ThrowMinMaxValueSwapped();
+            }
+
+            if (maxValue == minValue)
+            {
+                return minValue;
+            }
+        }
+
         /// <summary>Returns a random floating-point number that is greater than or equal to 0.0, and less than 1.0.</summary>
         /// <returns>A single-precision floating point number that is greater than or equal to 0.0, and less than 1.0.</returns>
         public virtual float NextSingle()
