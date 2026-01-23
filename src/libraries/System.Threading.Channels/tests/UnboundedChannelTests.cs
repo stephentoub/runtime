@@ -240,6 +240,46 @@ namespace System.Threading.Channels.Tests
     public sealed class SyncMultiReaderUnboundedChannelTests : UnboundedChannelTests
     {
         protected override bool AllowSynchronousContinuations => true;
+
+        [OuterLoop]
+        [ConditionalFact(typeof(PlatformDetection), nameof(PlatformDetection.IsThreadingSupported))]
+        public void Completion_CompletesAfterConcurrentTryReadAndTryComplete()
+        {
+            for (int iter = 0; iter < 100_000; iter++)
+            {
+                var channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions
+                {
+                    SingleWriter = false,
+                    SingleReader = false,
+                    AllowSynchronousContinuations = AllowSynchronousContinuations
+                });
+
+                channel.Writer.TryWrite(1);
+                channel.Writer.TryWrite(2);
+
+                channel.Reader.TryRead(out _);
+
+                using var barrier = new Barrier(2);
+                var t1 = Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    channel.Reader.TryRead(out _);
+                });
+
+                var t2 = Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    channel.Writer.TryComplete();
+                });
+
+                Task.WaitAll(t1, t2);
+
+                channel.Reader.TryRead(out _);
+
+                Task completionTask = channel.Reader.Completion;
+                Assert.True(completionTask.Wait(TimeSpan.FromSeconds(10)), $"Completion task should complete after all items are read and TryComplete is called. Iteration {iter}");
+            }
+        }
     }
 
     public sealed class AsyncMultiReaderUnboundedChannelTests : UnboundedChannelTests
