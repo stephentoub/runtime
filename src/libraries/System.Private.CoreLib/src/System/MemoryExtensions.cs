@@ -4908,6 +4908,123 @@ namespace System
             }
         }
 
+        /// <summary>
+        /// Copies <paramref name="source"/> to <paramref name="destination"/>, replacing all occurrences
+        /// of <paramref name="oldValue"/> with <paramref name="newValue"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the elements in the spans.</typeparam>
+        /// <param name="source">The span to copy.</param>
+        /// <param name="destination">The span into which the copied and replaced values should be written.</param>
+        /// <param name="oldValue">The sequence to be replaced with <paramref name="newValue"/>.</param>
+        /// <param name="newValue">The sequence to replace all occurrences of <paramref name="oldValue"/>.</param>
+        /// <returns>The number of elements written into <paramref name="destination"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="oldValue"/> is empty.</exception>
+        /// <exception cref="ArgumentException">The <paramref name="destination"/> is too short to hold the result.</exception>
+        /// <exception cref="ArgumentException">The <paramref name="source"/> and <paramref name="destination"/> overlap.</exception>
+        public static unsafe int Replace<T>(this ReadOnlySpan<T> source, Span<T> destination, ReadOnlySpan<T> oldValue, ReadOnlySpan<T> newValue) where T : IEquatable<T>?
+        {
+            if (!TryReplace(source, destination, oldValue, newValue, out int valuesWritten))
+            {
+                ThrowHelper.ThrowArgumentException_DestinationTooShort();
+            }
+
+            return valuesWritten;
+        }
+
+        /// <summary>
+        /// Copies <paramref name="source"/> to <paramref name="destination"/>, replacing all occurrences
+        /// of <paramref name="oldValue"/> with <paramref name="newValue"/>.
+        /// </summary>
+        /// <typeparam name="T">The type of the elements in the spans.</typeparam>
+        /// <param name="source">The span to copy.</param>
+        /// <param name="destination">The span into which the copied and replaced values should be written.</param>
+        /// <param name="oldValue">The sequence to be replaced with <paramref name="newValue"/>.</param>
+        /// <param name="newValue">The sequence to replace all occurrences of <paramref name="oldValue"/>.</param>
+        /// <param name="valuesWritten">The number of elements written into <paramref name="destination"/>.</param>
+        /// <returns><see langword="true"/> if <paramref name="destination"/> was large enough to hold the entire result; otherwise, <see langword="false"/>.</returns>
+        /// <exception cref="ArgumentException"><paramref name="oldValue"/> is empty.</exception>
+        /// <exception cref="ArgumentException">The <paramref name="source"/> and <paramref name="destination"/> overlap.</exception>
+        public static unsafe bool TryReplace<T>(this ReadOnlySpan<T> source, Span<T> destination, ReadOnlySpan<T> oldValue, ReadOnlySpan<T> newValue, out int valuesWritten) where T : IEquatable<T>?
+        {
+            if (oldValue.IsEmpty)
+            {
+                throw new ArgumentException(SR.Arg_EmptySpan, nameof(oldValue));
+            }
+
+            if (source.IsEmpty)
+            {
+                valuesWritten = 0;
+                return true;
+            }
+
+            // Check for overlap between source and destination.
+            if (destination.Length > 0)
+            {
+                ref T src = ref MemoryMarshal.GetReference(source);
+                ref T dst = ref MemoryMarshal.GetReference(destination);
+                nint byteOffset = Unsafe.ByteOffset(ref src, ref dst);
+                if (byteOffset == 0
+                    ? oldValue.Length != newValue.Length
+                    : ((nuint)byteOffset < (nuint)((nint)source.Length * sizeof(T)) ||
+                       (nuint)byteOffset > (nuint)(-((nint)destination.Length * sizeof(T)))))
+                {
+                    ThrowHelper.ThrowArgumentException(ExceptionResource.InvalidOperation_SpanOverlappedOperation);
+                }
+            }
+
+            ReadOnlySpan<T> remaining = source;
+            int destIndex = 0;
+
+            while (!remaining.IsEmpty)
+            {
+                int idx = remaining.IndexOf(oldValue);
+                if (idx < 0)
+                {
+                    // No more matches, copy remaining source.
+                    if (destIndex + remaining.Length > destination.Length)
+                    {
+                        valuesWritten = 0;
+                        return false;
+                    }
+
+                    remaining.CopyTo(destination.Slice(destIndex));
+                    destIndex += remaining.Length;
+                    break;
+                }
+
+                // Copy prefix before the match.
+                if (idx > 0)
+                {
+                    if (destIndex + idx > destination.Length)
+                    {
+                        valuesWritten = 0;
+                        return false;
+                    }
+
+                    remaining.Slice(0, idx).CopyTo(destination.Slice(destIndex));
+                    destIndex += idx;
+                }
+
+                // Copy replacement.
+                if (!newValue.IsEmpty)
+                {
+                    if (destIndex + newValue.Length > destination.Length)
+                    {
+                        valuesWritten = 0;
+                        return false;
+                    }
+
+                    newValue.CopyTo(destination.Slice(destIndex));
+                    destIndex += newValue.Length;
+                }
+
+                remaining = remaining.Slice(idx + oldValue.Length);
+            }
+
+            valuesWritten = destIndex;
+            return true;
+        }
+
         /// <summary>Finds the length of any common prefix shared between <paramref name="span"/> and <paramref name="other"/>.</summary>
         /// <typeparam name="T">The type of the elements in the spans.</typeparam>
         /// <param name="span">The first sequence to compare.</param>

@@ -424,6 +424,8 @@ namespace System
         public static void Replace<T>(this System.Span<T> span, T oldValue, T newValue, System.Collections.Generic.IEqualityComparer<T>? comparer = null) { }
         public static void Replace<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, T oldValue, T newValue) where T : System.IEquatable<T>? { }
         public static void Replace<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, T oldValue, T newValue, System.Collections.Generic.IEqualityComparer<T>? comparer = null) { }
+        public static int Replace<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, System.ReadOnlySpan<T> oldValue, System.ReadOnlySpan<T> newValue) where T : System.IEquatable<T>? { throw null; }
+        public static bool TryReplace<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, System.ReadOnlySpan<T> oldValue, System.ReadOnlySpan<T> newValue, out int valuesWritten) where T : System.IEquatable<T>? { throw null; }
         public static void ReplaceAny<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, System.Buffers.SearchValues<T> values, T newValue) where T : IEquatable<T>? { }
         public static void ReplaceAny<T>(this System.Span<T> span, System.Buffers.SearchValues<T> values, T newValue) where T : IEquatable<T>? { throw null; }
         public static void ReplaceAnyExcept<T>(this System.ReadOnlySpan<T> source, System.Span<T> destination, System.Buffers.SearchValues<T> values, T newValue) where T : IEquatable<T>? { }
