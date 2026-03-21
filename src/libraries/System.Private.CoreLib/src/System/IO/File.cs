@@ -196,6 +196,168 @@ namespace System.IO
             return SafeFileHandle.Open(NullDevicePath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None, preallocationSize: 0);
         }
 
+        /// <summary>
+        /// Tries to open a file handle without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="mode">A <see cref="FileMode" /> value that specifies whether a file is created if one does not exist, and determines whether the contents of existing files are retained or overwritten.</param>
+        /// <param name="access">A <see cref="FileAccess" /> value that specifies the operations that can be performed on the file.</param>
+        /// <param name="share">A <see cref="FileShare" /> value specifying the type of access other threads have to the file.</param>
+        /// <param name="options">An object that describes optional <see cref="SafeFileHandle" /> parameters to use.</param>
+        /// <param name="preallocationSize">The initial allocation size in bytes for the file. A positive value is effective only when a regular file is being created, overwritten, or replaced.</param>
+        /// <param name="fileHandle">When this method returns <see langword="true"/>, contains the opened <see cref="SafeFileHandle"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <remarks>
+        /// This method still throws for argument validation errors (for example, when <paramref name="path"/> is <see langword="null"/> or empty).
+        /// Only I/O errors such as file-not-found or access-denied are suppressed.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="preallocationSize" /> is negative, or <paramref name="mode" />, <paramref name="access" />, or <paramref name="share" /> contain an invalid value.</exception>
+        public static bool TryOpenHandle(
+            string path,
+            FileMode mode,
+            FileAccess access,
+            FileShare share,
+            FileOptions options,
+            long preallocationSize,
+            [NotNullWhen(true)] out SafeFileHandle? fileHandle)
+        {
+            Strategies.FileStreamHelpers.ValidateArguments(path, mode, access, share, bufferSize: 0, options, preallocationSize);
+
+            return SafeFileHandle.TryOpen(Path.GetFullPath(path), mode, access, share, options, preallocationSize, out fileHandle);
+        }
+
+        /// <summary>
+        /// Tries to open a file handle without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="mode">A <see cref="FileMode" /> value that specifies whether a file is created if one does not exist, and determines whether the contents of existing files are retained or overwritten. Defaults to <see cref="FileMode.Open" />.</param>
+        /// <param name="access">A <see cref="FileAccess" /> value that specifies the operations that can be performed on the file. Defaults to <see cref="FileAccess.Read" />.</param>
+        /// <param name="share">A <see cref="FileShare" /> value specifying the type of access other threads have to the file. Defaults to <see cref="FileShare.Read" />.</param>
+        /// <param name="fileHandle">When this method returns <see langword="true"/>, contains the opened <see cref="SafeFileHandle"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode" />, <paramref name="access" />, or <paramref name="share" /> contain an invalid value.</exception>
+        public static bool TryOpenHandle(
+            string path,
+            FileMode mode,
+            FileAccess access,
+            FileShare share,
+            [NotNullWhen(true)] out SafeFileHandle? fileHandle)
+        {
+            return TryOpenHandle(path, mode, access, share, FileOptions.None, preallocationSize: 0, out fileHandle);
+        }
+
+        /// <summary>
+        /// Tries to open a <see cref="FileStream" /> on the specified path without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="options">An object that describes optional <see cref="FileStream" /> parameters to use.</param>
+        /// <param name="fileStream">When this method returns <see langword="true"/>, contains the opened <see cref="FileStream"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <remarks>
+        /// This method still throws for argument validation errors. Only I/O errors such as file-not-found or access-denied are suppressed.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> or <paramref name="options"/> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string, or <paramref name="options"/> has an invalid combination of <see cref="FileStreamOptions.Mode"/> and <see cref="FileStreamOptions.Access"/>.</exception>
+        public static bool TryOpen(
+            string path,
+            FileStreamOptions options,
+            [NotNullWhen(true)] out FileStream? fileStream)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            ArgumentNullException.ThrowIfNull(options);
+            if ((options.Access & FileAccess.Read) != 0 && options.Mode == FileMode.Append)
+            {
+                throw new ArgumentException(SR.Argument_InvalidAppendMode, nameof(options));
+            }
+            else if ((options.Access & FileAccess.Write) == 0)
+            {
+                if (options.Mode is FileMode.Truncate or FileMode.CreateNew or FileMode.Create or FileMode.Append)
+                {
+                    throw new ArgumentException(SR.Format(SR.Argument_InvalidFileModeAndAccessCombo, options.Mode, options.Access), nameof(options));
+                }
+            }
+
+            if (!TryOpenHandle(path, options.Mode, options.Access, options.Share, options.Options, options.PreallocationSize, out SafeFileHandle? handle))
+            {
+                fileStream = null;
+                return false;
+            }
+
+            fileStream = new FileStream(handle, options.Access, options.BufferSize);
+            return true;
+        }
+
+        /// <summary>
+        /// Tries to open a <see cref="FileStream" /> on the specified path without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="mode">A <see cref="FileMode" /> value that specifies whether a file is created if one does not exist, and determines whether the contents of existing files are retained or overwritten.</param>
+        /// <param name="access">A <see cref="FileAccess" /> value that specifies the operations that can be performed on the file.</param>
+        /// <param name="share">A <see cref="FileShare" /> value specifying the type of access other threads have to the file.</param>
+        /// <param name="fileStream">When this method returns <see langword="true"/>, contains the opened <see cref="FileStream"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode" />, <paramref name="access" />, or <paramref name="share" /> contain an invalid value.</exception>
+        public static bool TryOpen(
+            string path,
+            FileMode mode,
+            FileAccess access,
+            FileShare share,
+            [NotNullWhen(true)] out FileStream? fileStream)
+        {
+            if (!TryOpenHandle(path, mode, access, share, FileOptions.None, preallocationSize: 0, out SafeFileHandle? handle))
+            {
+                fileStream = null;
+                return false;
+            }
+
+            fileStream = new FileStream(handle, access);
+            return true;
+        }
+
+        /// <summary>
+        /// Tries to open a <see cref="FileStream" /> on the specified path without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="mode">A <see cref="FileMode" /> value that specifies whether a file is created if one does not exist, and determines whether the contents of existing files are retained or overwritten.</param>
+        /// <param name="access">A <see cref="FileAccess" /> value that specifies the operations that can be performed on the file.</param>
+        /// <param name="fileStream">When this method returns <see langword="true"/>, contains the opened <see cref="FileStream"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode" /> or <paramref name="access" /> contain an invalid value.</exception>
+        public static bool TryOpen(
+            string path,
+            FileMode mode,
+            FileAccess access,
+            [NotNullWhen(true)] out FileStream? fileStream)
+        {
+            return TryOpen(path, mode, access, FileShare.None, out fileStream);
+        }
+
+        /// <summary>
+        /// Tries to open a <see cref="FileStream" /> on the specified path without throwing an exception on failure.
+        /// </summary>
+        /// <param name="path">The file to open.</param>
+        /// <param name="mode">A <see cref="FileMode" /> value that specifies whether a file is created if one does not exist, and determines whether the contents of existing files are retained or overwritten.</param>
+        /// <param name="fileStream">When this method returns <see langword="true"/>, contains the opened <see cref="FileStream"/>. When this method returns <see langword="false"/>, contains <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the file was successfully opened; <see langword="false"/> otherwise.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path" /> is <see langword="null" />.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path" /> is an empty string.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode" /> contains an invalid value.</exception>
+        public static bool TryOpen(
+            string path,
+            FileMode mode,
+            [NotNullWhen(true)] out FileStream? fileStream)
+        {
+            return TryOpen(path, mode, mode == FileMode.Append ? FileAccess.Write : FileAccess.ReadWrite, FileShare.None, out fileStream);
+        }
+
         // File and Directory UTC APIs treat a DateTimeKind.Unspecified as UTC whereas
         // ToUniversalTime treats this as local.
         internal static DateTimeOffset GetUtcDateTimeOffset(DateTime dateTime)

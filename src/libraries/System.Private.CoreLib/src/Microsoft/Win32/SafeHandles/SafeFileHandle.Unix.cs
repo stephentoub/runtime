@@ -142,6 +142,21 @@ namespace Microsoft.Win32.SafeHandles
             return handle;
         }
 
+        private static SafeFileHandle? TryOpen(string path, Interop.Sys.OpenFlags flags, int mode)
+        {
+            Debug.Assert(path != null);
+            SafeFileHandle handle = Interop.Sys.Open(path, flags, mode);
+
+            if (handle.IsInvalid)
+            {
+                handle.Dispose();
+                return null;
+            }
+
+            handle._path = path;
+            return handle;
+        }
+
         protected override bool ReleaseHandle()
         {
             // If DeleteOnClose was requested when constructed, delete the file now.
@@ -236,6 +251,50 @@ namespace Microsoft.Win32.SafeHandles
                                             Func<Interop.ErrorInfo, Interop.Sys.OpenFlags, string, Exception?>? createOpenException = null)
         {
             return Open(fullPath, mode, access, share, options, preallocationSize, unixCreateMode ?? DefaultCreateMode, out _, out _, false, out _, createOpenException);
+        }
+
+        internal static bool TryOpen(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize, out SafeFileHandle? fileHandle)
+        {
+            fileHandle = null;
+            Interop.Sys.OpenFlags openFlags = PreOpenConfigurationFromOptions(mode, access, share, options, failForSymlink: false);
+
+            SafeFileHandle? safeFileHandle = null;
+            try
+            {
+                while (true)
+                {
+                    safeFileHandle = TryOpen(fullPath, openFlags, (int)DefaultCreateMode);
+                    if (safeFileHandle is null)
+                    {
+                        return false;
+                    }
+
+                    if (safeFileHandle.Init(fullPath, mode, access, share, options, preallocationSize, out _, out _))
+                    {
+                        fileHandle = safeFileHandle;
+                        return true;
+                    }
+                    else
+                    {
+                        safeFileHandle.Dispose();
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                safeFileHandle?.Dispose();
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                safeFileHandle?.Dispose();
+                return false;
+            }
+            catch (Exception)
+            {
+                safeFileHandle?.Dispose();
+                throw;
+            }
         }
 
         internal static SafeFileHandle? OpenNoFollowSymlink(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize, out bool wasSymlink, UnixFileMode? unixCreateMode = null,

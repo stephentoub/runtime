@@ -10368,6 +10368,12 @@ namespace System.IO
         public static System.IO.FileStream OpenRead(string path) { throw null; }
         public static System.IO.StreamReader OpenText(string path) { throw null; }
         public static System.IO.FileStream OpenWrite(string path) { throw null; }
+        public static bool TryOpen(string path, System.IO.FileMode mode, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.IO.FileStream? fileStream) { throw null; }
+        public static bool TryOpen(string path, System.IO.FileMode mode, System.IO.FileAccess access, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.IO.FileStream? fileStream) { throw null; }
+        public static bool TryOpen(string path, System.IO.FileMode mode, System.IO.FileAccess access, System.IO.FileShare share, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.IO.FileStream? fileStream) { throw null; }
+        public static bool TryOpen(string path, System.IO.FileStreamOptions options, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out System.IO.FileStream? fileStream) { throw null; }
+        public static bool TryOpenHandle(string path, System.IO.FileMode mode, System.IO.FileAccess access, System.IO.FileShare share, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out Microsoft.Win32.SafeHandles.SafeFileHandle? fileHandle) { throw null; }
+        public static bool TryOpenHandle(string path, System.IO.FileMode mode, System.IO.FileAccess access, System.IO.FileShare share, System.IO.FileOptions options, long preallocationSize, [System.Diagnostics.CodeAnalysis.NotNullWhenAttribute(true)] out Microsoft.Win32.SafeHandles.SafeFileHandle? fileHandle) { throw null; }
         public static byte[] ReadAllBytes(string path) { throw null; }
         public static System.Threading.Tasks.Task<byte[]> ReadAllBytesAsync(string path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         public static string[] ReadAllLines(string path) { throw null; }

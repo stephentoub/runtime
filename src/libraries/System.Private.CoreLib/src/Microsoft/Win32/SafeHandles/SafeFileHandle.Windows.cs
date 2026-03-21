@@ -143,7 +143,82 @@ namespace Microsoft.Win32.SafeHandles
             }
         }
 
+        internal static bool TryOpen(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize, out SafeFileHandle? fileHandle)
+        {
+            using (DisableMediaInsertionPrompt.Create())
+            {
+                fileHandle = TryCreateFile(fullPath, mode, access, share, options);
+                if (fileHandle is null)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    if (preallocationSize > 0)
+                    {
+                        Preallocate(fullPath, preallocationSize, fileHandle);
+                    }
+
+                    if ((options & FileOptions.Asynchronous) != 0)
+                    {
+                        fileHandle.InitThreadPoolBinding();
+                    }
+                }
+                catch (IOException)
+                {
+                    fileHandle.Dispose();
+                    fileHandle = null;
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
         private static unsafe SafeFileHandle CreateFile(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
+        {
+            SafeFileHandle fileHandle = CreateFileCore(fullPath, mode, access, share, options);
+            if (fileHandle.IsInvalid)
+            {
+                // Return a meaningful exception with the full path.
+
+                // NT5 oddity - when trying to open "C:\" as a Win32FileStream,
+                // we usually get ERROR_PATH_NOT_FOUND from the OS.  We should
+                // probably be consistent w/ every other directory.
+                int errorCode = Marshal.GetLastPInvokeError();
+
+                if (errorCode == Interop.Errors.ERROR_PATH_NOT_FOUND && fullPath!.Length == PathInternal.GetRootLength(fullPath))
+                {
+                    errorCode = Interop.Errors.ERROR_ACCESS_DENIED;
+                }
+
+                fileHandle.Dispose();
+                throw Win32Marshal.GetExceptionForWin32Error(errorCode, fullPath);
+            }
+
+            fileHandle._path = fullPath;
+            fileHandle._fileOptions = options;
+            fileHandle._lengthCanBeCached = (share & FileShare.Write) == 0 && (access & FileAccess.Write) == 0;
+            return fileHandle;
+        }
+
+        private static unsafe SafeFileHandle? TryCreateFile(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
+        {
+            SafeFileHandle fileHandle = CreateFileCore(fullPath, mode, access, share, options);
+            if (fileHandle.IsInvalid)
+            {
+                fileHandle.Dispose();
+                return null;
+            }
+
+            fileHandle._path = fullPath;
+            fileHandle._fileOptions = options;
+            fileHandle._lengthCanBeCached = (share & FileShare.Write) == 0 && (access & FileAccess.Write) == 0;
+            return fileHandle;
+        }
+
+        private static unsafe SafeFileHandle CreateFileCore(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
         {
             Interop.Kernel32.SECURITY_ATTRIBUTES secAttrs = Interop.Kernel32.SECURITY_ATTRIBUTES.Create((share & FileShare.Inheritable) != 0);
 
@@ -169,29 +244,7 @@ namespace Microsoft.Win32.SafeHandles
             // (note that this is the effective default on CreateFile2)
             flagsAndAttributes |= (Interop.Kernel32.SecurityOptions.SECURITY_SQOS_PRESENT | Interop.Kernel32.SecurityOptions.SECURITY_ANONYMOUS);
 
-            SafeFileHandle fileHandle = Interop.Kernel32.CreateFile(fullPath, fAccess, share, &secAttrs, mode, flagsAndAttributes, IntPtr.Zero);
-            if (fileHandle.IsInvalid)
-            {
-                // Return a meaningful exception with the full path.
-
-                // NT5 oddity - when trying to open "C:\" as a Win32FileStream,
-                // we usually get ERROR_PATH_NOT_FOUND from the OS.  We should
-                // probably be consistent w/ every other directory.
-                int errorCode = Marshal.GetLastPInvokeError();
-
-                if (errorCode == Interop.Errors.ERROR_PATH_NOT_FOUND && fullPath!.Length == PathInternal.GetRootLength(fullPath))
-                {
-                    errorCode = Interop.Errors.ERROR_ACCESS_DENIED;
-                }
-
-                fileHandle.Dispose();
-                throw Win32Marshal.GetExceptionForWin32Error(errorCode, fullPath);
-            }
-
-            fileHandle._path = fullPath;
-            fileHandle._fileOptions = options;
-            fileHandle._lengthCanBeCached = (share & FileShare.Write) == 0 && (access & FileAccess.Write) == 0;
-            return fileHandle;
+            return Interop.Kernel32.CreateFile(fullPath, fAccess, share, &secAttrs, mode, flagsAndAttributes, IntPtr.Zero);
         }
 
         private static unsafe void Preallocate(string fullPath, long preallocationSize, SafeFileHandle fileHandle)
