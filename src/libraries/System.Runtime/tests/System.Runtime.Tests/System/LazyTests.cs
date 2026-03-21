@@ -577,6 +577,102 @@ namespace System.Tests
             object syncLock = null;
             Assert.Throws<InvalidOperationException>(() => LazyInitializer.EnsureInitialized(ref target, ref syncLock, () => null));
         }
+
+        [Fact]
+        public static void Ctor_ValueFactory_LazyThreadSafetyMode_CacheExceptions_NullFactory()
+        {
+            AssertExtensions.Throws<ArgumentNullException>("valueFactory", () => new Lazy<object>(null, LazyThreadSafetyMode.ExecutionAndPublication, true));
+            AssertExtensions.Throws<ArgumentNullException>("valueFactory", () => new Lazy<object>(null, LazyThreadSafetyMode.ExecutionAndPublication, false));
+        }
+
+        [Fact]
+        public static void Ctor_ValueFactory_LazyThreadSafetyMode_CacheExceptions_InvalidMode()
+        {
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("mode", () => new Lazy<string>(() => "foo", LazyThreadSafetyMode.None - 1, true));
+            AssertExtensions.Throws<ArgumentOutOfRangeException>("mode", () => new Lazy<string>(() => "foo", LazyThreadSafetyMode.ExecutionAndPublication + 1, false));
+        }
+
+        [Theory]
+        [InlineData(LazyThreadSafetyMode.ExecutionAndPublication)]
+        [InlineData(LazyThreadSafetyMode.None)]
+        [InlineData(LazyThreadSafetyMode.PublicationOnly)]
+        public static void CacheExceptionsTrue_CachesException(LazyThreadSafetyMode mode)
+        {
+            int callCount = 0;
+            var lazy = new Lazy<string>(() =>
+            {
+                callCount++;
+                throw new DivideByZeroException();
+            }, mode, cacheExceptions: true);
+
+            Exception exception1 = Assert.Throws<DivideByZeroException>(() => lazy.Value);
+            int callCountAfterFirst = callCount;
+
+            Exception exception2 = Assert.Throws<DivideByZeroException>(() => lazy.Value);
+            Assert.False(lazy.IsValueCreated);
+
+            if (mode != LazyThreadSafetyMode.PublicationOnly)
+            {
+                Assert.Same(exception1, exception2);
+                Assert.Equal(1, callCountAfterFirst);
+            }
+        }
+
+        [Theory]
+        [InlineData(LazyThreadSafetyMode.ExecutionAndPublication)]
+        [InlineData(LazyThreadSafetyMode.None)]
+        public static void CacheExceptionsFalse_DoesNotCacheException(LazyThreadSafetyMode mode)
+        {
+            int callCount = 0;
+            var lazy = new Lazy<string>(() =>
+            {
+                callCount++;
+                throw new DivideByZeroException();
+            }, mode, cacheExceptions: false);
+
+            Assert.Throws<DivideByZeroException>(() => lazy.Value);
+            Assert.Equal(1, callCount);
+
+            Assert.Throws<DivideByZeroException>(() => lazy.Value);
+            Assert.Equal(2, callCount);
+
+            Assert.False(lazy.IsValueCreated);
+        }
+
+        [Theory]
+        [InlineData(LazyThreadSafetyMode.ExecutionAndPublication)]
+        [InlineData(LazyThreadSafetyMode.None)]
+        public static void CacheExceptionsFalse_EventualSuccess(LazyThreadSafetyMode mode)
+        {
+            int callCount = 0;
+            var lazy = new Lazy<int>(() =>
+            {
+                if (++callCount < 3)
+                    throw new InvalidOperationException();
+                return callCount;
+            }, mode, cacheExceptions: false);
+
+            Assert.Throws<InvalidOperationException>(() => lazy.Value);
+            Assert.Throws<InvalidOperationException>(() => lazy.Value);
+            Assert.Equal(3, lazy.Value);
+            Assert.True(lazy.IsValueCreated);
+        }
+
+        [Theory]
+        [InlineData(LazyThreadSafetyMode.ExecutionAndPublication)]
+        [InlineData(LazyThreadSafetyMode.None)]
+        [InlineData(LazyThreadSafetyMode.PublicationOnly)]
+        public static void CacheExceptionsFalse_SuccessfulValueStillCached(LazyThreadSafetyMode mode)
+        {
+            int callCount = 0;
+            var lazy = new Lazy<int>(() => ++callCount, mode, cacheExceptions: false);
+
+            Assert.Equal(1, lazy.Value);
+            Assert.Equal(1, lazy.Value);
+            Assert.True(lazy.IsValueCreated);
+            Assert.Equal(1, callCount);
+        }
+
         private static void VerifyLazy<T>(Lazy<T> lazy, T expectedValue, bool hasValue, bool isValueCreated)
         {
             Assert.Equal(isValueCreated, lazy.IsValueCreated);

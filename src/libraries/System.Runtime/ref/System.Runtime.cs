@@ -4411,6 +4411,7 @@ namespace System
         public Lazy(System.Func<T> valueFactory) { }
         public Lazy(System.Func<T> valueFactory, bool isThreadSafe) { }
         public Lazy(System.Func<T> valueFactory, System.Threading.LazyThreadSafetyMode mode) { }
+        public Lazy(System.Func<T> valueFactory, System.Threading.LazyThreadSafetyMode mode, bool cacheExceptions) { }
         public Lazy(System.Threading.LazyThreadSafetyMode mode) { }
         public Lazy(T value) { }
         public bool IsValueCreated { get { throw null; } }

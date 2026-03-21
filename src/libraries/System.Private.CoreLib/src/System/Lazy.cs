@@ -44,11 +44,14 @@ namespace System
     {
         internal static readonly LazyHelper NoneViaConstructor            = new LazyHelper(LazyState.NoneViaConstructor);
         internal static readonly LazyHelper NoneViaFactory                = new LazyHelper(LazyState.NoneViaFactory);
+        internal static readonly LazyHelper NoneViaFactoryDontCacheExceptions = new LazyHelper(LazyState.NoneViaFactory, cacheExceptions: false);
         internal static readonly LazyHelper PublicationOnlyViaConstructor = new LazyHelper(LazyState.PublicationOnlyViaConstructor);
         internal static readonly LazyHelper PublicationOnlyViaFactory     = new LazyHelper(LazyState.PublicationOnlyViaFactory);
+        internal static readonly LazyHelper PublicationOnlyViaFactoryDontCacheExceptions = new LazyHelper(LazyState.PublicationOnlyViaFactory, cacheExceptions: false);
         internal static readonly LazyHelper PublicationOnlyWaitForOtherThreadToPublish       = new LazyHelper(LazyState.PublicationOnlyWait);
 
         internal LazyState State { get; }
+        internal bool CacheExceptions { get; }
 
         private readonly ExceptionDispatchInfo? _exceptionDispatch;
 
@@ -58,6 +61,13 @@ namespace System
         internal LazyHelper(LazyState state)
         {
             State = state;
+            CacheExceptions = true;
+        }
+
+        private LazyHelper(LazyState state, bool cacheExceptions)
+        {
+            State = state;
+            CacheExceptions = cacheExceptions;
         }
 
         /// <summary>
@@ -84,6 +94,7 @@ namespace System
                     break;
             }
 
+            CacheExceptions = true;
             _exceptionDispatch = ExceptionDispatchInfo.Capture(exception);
         }
 
@@ -130,22 +141,24 @@ namespace System
 
         internal static bool GetIsValueFaulted(LazyHelper? state) => state?._exceptionDispatch != null;
 
-        internal static LazyHelper Create(LazyThreadSafetyMode mode, bool useDefaultConstructor)
+        internal static LazyHelper Create(LazyThreadSafetyMode mode, bool useDefaultConstructor, bool cacheExceptions = true)
         {
             switch (mode)
             {
                 case LazyThreadSafetyMode.None:
-                    return useDefaultConstructor ? NoneViaConstructor : NoneViaFactory;
+                    if (useDefaultConstructor) return NoneViaConstructor;
+                    return cacheExceptions ? NoneViaFactory : NoneViaFactoryDontCacheExceptions;
 
                 case LazyThreadSafetyMode.PublicationOnly:
-                    return useDefaultConstructor ? PublicationOnlyViaConstructor : PublicationOnlyViaFactory;
+                    if (useDefaultConstructor) return PublicationOnlyViaConstructor;
+                    return cacheExceptions ? PublicationOnlyViaFactory : PublicationOnlyViaFactoryDontCacheExceptions;
 
                 case LazyThreadSafetyMode.ExecutionAndPublication:
                     // we need to create an object for ExecutionAndPublication because we use Monitor-based locking
                     LazyState state = useDefaultConstructor ?
                         LazyState.ExecutionAndPublicationViaConstructor :
                         LazyState.ExecutionAndPublicationViaFactory;
-                    return new LazyHelper(state);
+                    return cacheExceptions ? new LazyHelper(state) : new LazyHelper(state, cacheExceptions: false);
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mode), SR.Lazy_ctor_ModeInvalid);
@@ -205,8 +218,8 @@ namespace System
         /// An instance created with this constructor may be used concurrently from multiple threads.
         /// </remarks>
         public Lazy()
-            : this(null, LazyThreadSafetyMode.ExecutionAndPublication, useDefaultConstructor: true)
         {
+            _state = LazyHelper.Create(LazyThreadSafetyMode.ExecutionAndPublication, useDefaultConstructor: true);
         }
 
         /// <summary>
@@ -236,8 +249,10 @@ namespace System
         /// An instance created with this constructor may be used concurrently from multiple threads.
         /// </remarks>
         public Lazy(Func<T> valueFactory)
-            : this(valueFactory, LazyThreadSafetyMode.ExecutionAndPublication, useDefaultConstructor: false)
         {
+            ArgumentNullException.ThrowIfNull(valueFactory);
+            _factory = valueFactory;
+            _state = LazyHelper.Create(LazyThreadSafetyMode.ExecutionAndPublication, useDefaultConstructor: false);
         }
 
         /// <summary>
@@ -246,9 +261,9 @@ namespace System
         /// </summary>
         /// <param name="isThreadSafe">true if this instance should be usable by multiple threads concurrently; false if the instance will only be used by one thread at a time.
         /// </param>
-        public Lazy(bool isThreadSafe) :
-            this(null, LazyHelper.GetModeFromIsThreadSafe(isThreadSafe), useDefaultConstructor: true)
+        public Lazy(bool isThreadSafe)
         {
+            _state = LazyHelper.Create(LazyHelper.GetModeFromIsThreadSafe(isThreadSafe), useDefaultConstructor: true);
         }
 
         /// <summary>
@@ -257,9 +272,9 @@ namespace System
         /// </summary>
         /// <param name="mode">The lazy thread-safety mode</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> mode contains an invalid valuee</exception>
-        public Lazy(LazyThreadSafetyMode mode) :
-            this(null, mode, useDefaultConstructor: true)
+        public Lazy(LazyThreadSafetyMode mode)
         {
+            _state = LazyHelper.Create(mode, useDefaultConstructor: true);
         }
 
         /// <summary>
@@ -273,9 +288,11 @@ namespace System
         /// </param>
         /// <exception cref="ArgumentNullException"><paramref name="valueFactory"/> is
         /// a null reference (<see langword="Nothing" /> in Visual Basic).</exception>
-        public Lazy(Func<T> valueFactory, bool isThreadSafe) :
-            this(valueFactory, LazyHelper.GetModeFromIsThreadSafe(isThreadSafe), useDefaultConstructor: false)
+        public Lazy(Func<T> valueFactory, bool isThreadSafe)
         {
+            ArgumentNullException.ThrowIfNull(valueFactory);
+            _factory = valueFactory;
+            _state = LazyHelper.Create(LazyHelper.GetModeFromIsThreadSafe(isThreadSafe), useDefaultConstructor: false);
         }
 
         /// <summary>
@@ -290,19 +307,35 @@ namespace System
         /// a null reference (<see langword="Nothing" /> in Visual Basic).</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> mode contains an invalid value.</exception>
         public Lazy(Func<T> valueFactory, LazyThreadSafetyMode mode)
-            : this(valueFactory, mode, useDefaultConstructor: false)
         {
+            ArgumentNullException.ThrowIfNull(valueFactory);
+            _factory = valueFactory;
+            _state = LazyHelper.Create(mode, useDefaultConstructor: false);
         }
 
-        private Lazy(Func<T>? valueFactory, LazyThreadSafetyMode mode, bool useDefaultConstructor)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Lazy{T}"/> class
+        /// that uses a specified initialization function and a specified thread-safety mode,
+        /// and optionally controls whether exceptions thrown by the factory are cached.
+        /// </summary>
+        /// <param name="valueFactory">
+        /// The <see cref="Func{T}"/> invoked to produce the lazily-initialized value when it is needed.
+        /// </param>
+        /// <param name="mode">The lazy thread-safety mode.</param>
+        /// <param name="cacheExceptions">
+        /// <see langword="true"/> to cache exceptions thrown by <paramref name="valueFactory"/> so that
+        /// the same exception is thrown on every subsequent access to <see cref="Value"/>;
+        /// <see langword="false"/> to discard the exception, allowing the factory to be re-invoked
+        /// on the next access to <see cref="Value"/>.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="valueFactory"/> is
+        /// a null reference (<see langword="Nothing" /> in Visual Basic).</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> mode contains an invalid value.</exception>
+        public Lazy(Func<T> valueFactory, LazyThreadSafetyMode mode, bool cacheExceptions)
         {
-            if (!useDefaultConstructor)
-            {
-                ArgumentNullException.ThrowIfNull(valueFactory);
-            }
-
+            ArgumentNullException.ThrowIfNull(valueFactory);
             _factory = valueFactory;
-            _state = LazyHelper.Create(mode, useDefaultConstructor);
+            _state = LazyHelper.Create(mode, useDefaultConstructor: false, cacheExceptions);
         }
 
         private void ViaConstructor()
@@ -313,17 +346,29 @@ namespace System
 
         private void ViaFactory(LazyThreadSafetyMode mode)
         {
+            Func<T>? factory = _factory;
             try
             {
-                Func<T> factory = _factory ?? throw new InvalidOperationException(SR.Lazy_Value_RecursiveCallsToValue);
-                _factory = null;
+                if (factory is null)
+                {
+                    throw new InvalidOperationException(SR.Lazy_Value_RecursiveCallsToValue);
+                }
 
+                _factory = null;
                 _value = factory();
                 _state = null; // volatile write, must occur after setting _value
             }
             catch (Exception exception)
             {
-                _state = new LazyHelper(mode, exception);
+                if (_state!.CacheExceptions)
+                {
+                    _state = new LazyHelper(mode, exception);
+                }
+                else if (factory is not null)
+                {
+                    // Restore the factory so the next access to Value will re-invoke it.
+                    _factory = factory;
+                }
                 throw;
             }
         }
