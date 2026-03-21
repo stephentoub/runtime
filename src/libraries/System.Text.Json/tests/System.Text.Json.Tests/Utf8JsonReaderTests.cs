@@ -4882,5 +4882,89 @@ namespace System.Text.Json.Tests
             Assert.True(reader.Read());
             Assert.Equal(JsonTokenType.StartObject, reader.TokenType);
         }
+
+        [Fact]
+        public static void LineNumberAndBytePositionInLine_DefaultReader()
+        {
+            Utf8JsonReader reader = default;
+            Assert.Equal(0, reader.LineNumber);
+            Assert.Equal(0, reader.BytePositionInLine);
+        }
+
+        [Fact]
+        public static void LineNumberAndBytePositionInLine_SingleLine()
+        {
+            byte[] data = """{"foo":"bar"}"""u8.ToArray();
+            var reader = new Utf8JsonReader(data);
+
+            Assert.True(reader.Read()); // StartObject
+            Assert.Equal(0, reader.LineNumber);
+            Assert.Equal(1, reader.BytePositionInLine);
+
+            Assert.True(reader.Read()); // PropertyName "foo"
+            Assert.Equal(0, reader.LineNumber);
+
+            Assert.True(reader.Read()); // String "bar"
+            Assert.Equal(0, reader.LineNumber);
+            Assert.Equal(12, reader.BytePositionInLine);
+
+            Assert.True(reader.Read()); // EndObject
+            Assert.Equal(0, reader.LineNumber);
+        }
+
+        [Theory]
+        [InlineData("{\r\n  \"foo\": 1\r\n}")]
+        [InlineData("{\n  \"foo\": 1\n}")]
+        public static void LineNumberAndBytePositionInLine_MultiLine(string json)
+        {
+            byte[] data = System.Text.Encoding.UTF8.GetBytes(json);
+            var reader = new Utf8JsonReader(data);
+
+            Assert.True(reader.Read()); // StartObject
+            Assert.Equal(0, reader.LineNumber);
+
+            Assert.True(reader.Read()); // PropertyName "foo"
+            Assert.Equal(1, reader.LineNumber);
+
+            Assert.True(reader.Read()); // Number 1
+            Assert.Equal(1, reader.LineNumber);
+
+            Assert.True(reader.Read()); // EndObject
+            Assert.Equal(2, reader.LineNumber);
+            Assert.Equal(1, reader.BytePositionInLine);
+        }
+
+        [Fact]
+        public static void LineNumberAndBytePositionInLine_MatchJsonReaderState()
+        {
+            byte[] data = """{"a": 1}"""u8.ToArray();
+            var reader = new Utf8JsonReader(data);
+
+            while (reader.Read())
+            {
+                Assert.Equal(reader.LineNumber, reader.CurrentState.LineNumber);
+                Assert.Equal(reader.BytePositionInLine, reader.CurrentState.BytePositionInLine);
+            }
+        }
+
+        [Fact]
+        public static void JsonReaderState_LineNumberAndBytePositionInLine_Default()
+        {
+            var state = new JsonReaderState();
+            Assert.Equal(0, state.LineNumber);
+            Assert.Equal(0, state.BytePositionInLine);
+        }
+
+        [Fact]
+        public static void JsonReaderState_LineNumberAndBytePositionInLine_AfterReading()
+        {
+            byte[] data = "{\n  \"key\": true\n}"u8.ToArray();
+            var reader = new Utf8JsonReader(data);
+            while (reader.Read()) { }
+
+            JsonReaderState state = reader.CurrentState;
+            Assert.Equal(2, state.LineNumber);
+            Assert.Equal(1, state.BytePositionInLine);
+        }
     }
 }

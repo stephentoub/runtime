@@ -516,10 +516,10 @@ namespace System.Text.Json
         {
             Debug.Assert(ex.Path is null); // do not overwrite existing path information
 
-            long lineNumber = reader.CurrentState._lineNumber;
+            long lineNumber = reader.LineNumber;
             ex.LineNumber = lineNumber;
 
-            long bytePositionInLine = reader.CurrentState._bytePositionInLine;
+            long bytePositionInLine = reader.BytePositionInLine;
             ex.BytePositionInLine = bytePositionInLine;
 
             string path = state.JsonPath();
@@ -636,8 +636,8 @@ namespace System.Text.Json
                 message += SR.Format(SR.SerializationNotSupportedParentType, propertyType);
             }
 
-            long lineNumber = reader.CurrentState._lineNumber;
-            long bytePositionInLine = reader.CurrentState._bytePositionInLine;
+            long lineNumber = reader.LineNumber;
+            long bytePositionInLine = reader.BytePositionInLine;
             message += $" Path: {state.JsonPath()} | LineNumber: {lineNumber} | BytePositionInLine: {bytePositionInLine}.";
 
             throw new NotSupportedException(message, innerException);

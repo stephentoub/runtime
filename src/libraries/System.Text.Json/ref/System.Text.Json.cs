@@ -210,6 +210,8 @@ namespace System.Text.Json
         private readonly object _dummy;
         private readonly int _dummyPrimitive;
         public JsonReaderState(System.Text.Json.JsonReaderOptions options = default(System.Text.Json.JsonReaderOptions)) { throw null; }
+        public long BytePositionInLine { get { throw null; } }
+        public long LineNumber { get { throw null; } }
         public System.Text.Json.JsonReaderOptions Options { get { throw null; } }
     }
     public static partial class JsonSerializer
@@ -511,11 +513,13 @@ namespace System.Text.Json
         public Utf8JsonReader(System.Buffers.ReadOnlySequence<byte> jsonData, System.Text.Json.JsonReaderOptions options = default(System.Text.Json.JsonReaderOptions)) { throw null; }
         public Utf8JsonReader(System.ReadOnlySpan<byte> jsonData, bool isFinalBlock, System.Text.Json.JsonReaderState state) { throw null; }
         public Utf8JsonReader(System.ReadOnlySpan<byte> jsonData, System.Text.Json.JsonReaderOptions options = default(System.Text.Json.JsonReaderOptions)) { throw null; }
+        public readonly long BytePositionInLine { get { throw null; } }
         public readonly long BytesConsumed { get { throw null; } }
         public readonly int CurrentDepth { get { throw null; } }
         public readonly System.Text.Json.JsonReaderState CurrentState { get { throw null; } }
         public readonly bool HasValueSequence { get { throw null; } }
         public readonly bool IsFinalBlock { get { throw null; } }
+        public readonly long LineNumber { get { throw null; } }
         public readonly System.SequencePosition Position { get { throw null; } }
         public readonly long TokenStartIndex { get { throw null; } }
         public readonly System.Text.Json.JsonTokenType TokenType { get { throw null; } }

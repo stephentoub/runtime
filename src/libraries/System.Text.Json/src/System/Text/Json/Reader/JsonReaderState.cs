@@ -78,6 +78,16 @@ namespace System.Text.Json
         }
 
         /// <summary>
+        /// Gets the current 0-indexed line number of the reader state.
+        /// </summary>
+        public long LineNumber => _lineNumber;
+
+        /// <summary>
+        /// Gets the current 0-indexed byte position within the current line of the reader state.
+        /// </summary>
+        public long BytePositionInLine => _bytePositionInLine;
+
+        /// <summary>
         /// Gets the custom behavior when reading JSON using
         /// the <see cref="Utf8JsonReader"/> that may deviate from strict adherence
         /// to the JSON specification, which is the default behavior.

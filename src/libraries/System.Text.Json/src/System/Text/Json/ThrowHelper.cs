@@ -377,8 +377,8 @@ namespace System.Text.Json
         {
             string message = GetResourceString(ref json, resource, nextByte, Encoding.UTF8.GetString(bytes));
 
-            long lineNumber = json.CurrentState._lineNumber;
-            long bytePositionInLine = json.CurrentState._bytePositionInLine;
+            long lineNumber = json.LineNumber;
+            long bytePositionInLine = json.BytePositionInLine;
 
             message += $" LineNumber: {lineNumber} | BytePositionInLine: {bytePositionInLine}.";
             return new JsonReaderException(message, lineNumber, bytePositionInLine);

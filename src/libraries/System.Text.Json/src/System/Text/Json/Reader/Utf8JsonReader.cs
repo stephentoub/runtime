@@ -139,6 +139,28 @@ namespace System.Text.Json
         public bool ValueIsEscaped { get; private set; }
 
         /// <summary>
+        /// Gets the current 0-indexed line number of the last processed JSON token.
+        /// </summary>
+        /// <remarks>
+        /// The line number reflects the position immediately after the last successfully read token.
+        /// For property names, the whitespace and colon between the name and value are also consumed,
+        /// so the position will be after the colon.
+        /// Line numbers are zero-based.
+        /// </remarks>
+        public readonly long LineNumber => _lineNumber;
+
+        /// <summary>
+        /// Gets the current 0-indexed byte position within the current line of the last processed JSON token.
+        /// </summary>
+        /// <remarks>
+        /// The byte position reflects the position immediately after the last successfully read token.
+        /// For property names, the whitespace and colon between the name and value are also consumed,
+        /// so the position will be after the colon.
+        /// Byte positions are zero-based.
+        /// </remarks>
+        public readonly long BytePositionInLine => _bytePositionInLine;
+
+        /// <summary>
         /// Returns the mode of this instance of the <see cref="Utf8JsonReader"/>.
         /// True when the reader was constructed with the input span containing the entire data to process.
         /// False when the reader was constructed knowing that the input span may contain partial data with more data to follow.
