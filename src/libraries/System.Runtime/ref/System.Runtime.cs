@@ -5041,6 +5041,10 @@ namespace System
         public virtual long NextInt64(long maxValue) { throw null; }
         public virtual long NextInt64(long minValue, long maxValue) { throw null; }
         public virtual float NextSingle() { throw null; }
+        public T Next<T>() where T : System.Numerics.IBinaryInteger<T>, System.Numerics.IMinMaxValue<T> { throw null; }
+        public T Next<T>(T maxValue) where T : System.Numerics.IBinaryInteger<T> { throw null; }
+        public T Next<T>(T minValue, T maxValue) where T : System.Numerics.IBinaryInteger<T> { throw null; }
+        public T NextFloat<T>() where T : System.Numerics.IBinaryFloatingPointIeee754<T> { throw null; }
         protected virtual double Sample() { throw null; }
         public void Shuffle<T>(System.Span<T> values) { }
         public void Shuffle<T>(T[] values) { }

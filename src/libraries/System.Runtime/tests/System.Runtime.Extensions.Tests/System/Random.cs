@@ -4,7 +4,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -994,6 +996,470 @@ namespace System.Tests
                 dest = new char[test.Length];
                 random.GetHexString(dest);
                 Assert.Equal(test.Expected, new string(dest));
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_InvalidArguments_Throws(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+
+            // Negative maxValue throws for all signed types.
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<sbyte>(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<short>(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<int>(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<long>(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<nint>(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<Int128>(-1));
+
+            // minValue > maxValue throws.
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<int>(2, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<long>(2, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<byte>((byte)5, (byte)3));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<uint>(10u, 5u));
+            Assert.Throws<ArgumentOutOfRangeException>(() => r.Next<Int128>((Int128)10, (Int128)5));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_ZeroMaxValue_ReturnsZero(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTZeroMaxValue<byte>(r);
+            AssertNextTZeroMaxValue<sbyte>(r);
+            AssertNextTZeroMaxValue<short>(r);
+            AssertNextTZeroMaxValue<ushort>(r);
+            AssertNextTZeroMaxValue<char>(r);
+            AssertNextTZeroMaxValue<int>(r);
+            AssertNextTZeroMaxValue<uint>(r);
+            AssertNextTZeroMaxValue<long>(r);
+            AssertNextTZeroMaxValue<ulong>(r);
+            AssertNextTZeroMaxValue<nint>(r);
+            AssertNextTZeroMaxValue<nuint>(r);
+            AssertNextTZeroMaxValue<Int128>(r);
+            AssertNextTZeroMaxValue<UInt128>(r);
+
+            static void AssertNextTZeroMaxValue<T>(Random r) where T : IBinaryInteger<T>
+            {
+                Assert.Equal(T.Zero, r.Next<T>(T.Zero));
+                Assert.Equal(T.Zero, r.Next<T>(T.Zero, T.Zero));
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_EqualMinMax_ReturnsMinValue(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTEqualMinMax<byte>(r, (byte)42);
+            AssertNextTEqualMinMax<sbyte>(r, (sbyte)-10);
+            AssertNextTEqualMinMax<short>(r, (short)1000);
+            AssertNextTEqualMinMax<ushort>(r, (ushort)500);
+            AssertNextTEqualMinMax<int>(r, 12345);
+            AssertNextTEqualMinMax<uint>(r, 99u);
+            AssertNextTEqualMinMax<long>(r, -42L);
+            AssertNextTEqualMinMax<ulong>(r, 100UL);
+            AssertNextTEqualMinMax<nint>(r, (nint)7);
+            AssertNextTEqualMinMax<nuint>(r, (nuint)7);
+            AssertNextTEqualMinMax<Int128>(r, (Int128)(-77));
+            AssertNextTEqualMinMax<UInt128>(r, (UInt128)200);
+
+            static void AssertNextTEqualMinMax<T>(Random r, T value) where T : IBinaryInteger<T>
+            {
+                Assert.Equal(value, r.Next<T>(value, value));
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_SingleElementRange_ReturnsThatValue(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTSingleElement<byte>(r, (byte)5, (byte)6);
+            AssertNextTSingleElement<sbyte>(r, (sbyte)-3, (sbyte)-2);
+            AssertNextTSingleElement<short>(r, (short)100, (short)101);
+            AssertNextTSingleElement<ushort>(r, (ushort)200, (ushort)201);
+            AssertNextTSingleElement<int>(r, 42, 43);
+            AssertNextTSingleElement<uint>(r, 42u, 43u);
+            AssertNextTSingleElement<long>(r, -1L, 0L);
+            AssertNextTSingleElement<ulong>(r, 99UL, 100UL);
+            AssertNextTSingleElement<nint>(r, (nint)10, (nint)11);
+            AssertNextTSingleElement<nuint>(r, (nuint)10, (nuint)11);
+            AssertNextTSingleElement<Int128>(r, (Int128)(-1), (Int128)0);
+            AssertNextTSingleElement<UInt128>(r, (UInt128)50, (UInt128)51);
+
+            static void AssertNextTSingleElement<T>(Random r, T min, T max) where T : IBinaryInteger<T>
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    Assert.Equal(min, r.Next<T>(min, max));
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_AllBuiltInTypes_MaxValueInRange(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTMaxValueInRange<byte>(r, (byte)100);
+            AssertNextTMaxValueInRange<sbyte>(r, (sbyte)50);
+            AssertNextTMaxValueInRange<short>(r, (short)500);
+            AssertNextTMaxValueInRange<ushort>(r, (ushort)500);
+            AssertNextTMaxValueInRange<char>(r, (char)100);
+            AssertNextTMaxValueInRange<int>(r, 1000);
+            AssertNextTMaxValueInRange<uint>(r, 1000u);
+            AssertNextTMaxValueInRange<long>(r, 1000L);
+            AssertNextTMaxValueInRange<ulong>(r, 1000UL);
+            AssertNextTMaxValueInRange<nint>(r, (nint)1000);
+            AssertNextTMaxValueInRange<nuint>(r, (nuint)1000);
+            AssertNextTMaxValueInRange<Int128>(r, (Int128)1000);
+            AssertNextTMaxValueInRange<UInt128>(r, (UInt128)1000);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_AllBuiltInTypes_MinMaxInRange(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTMinMaxInRange<byte>(r, (byte)10, (byte)200);
+            AssertNextTMinMaxInRange<sbyte>(r, (sbyte)-50, (sbyte)50);
+            AssertNextTMinMaxInRange<short>(r, (short)-500, (short)500);
+            AssertNextTMinMaxInRange<ushort>(r, (ushort)100, (ushort)1000);
+            AssertNextTMinMaxInRange<int>(r, -1000, 1000);
+            AssertNextTMinMaxInRange<uint>(r, 50u, 500u);
+            AssertNextTMinMaxInRange<long>(r, -100_000L, 100_000L);
+            AssertNextTMinMaxInRange<ulong>(r, 100UL, 1000UL);
+            AssertNextTMinMaxInRange<nint>(r, (nint)(-100), (nint)100);
+            AssertNextTMinMaxInRange<nuint>(r, (nuint)10, (nuint)500);
+            AssertNextTMinMaxInRange<Int128>(r, (Int128)(-1000), (Int128)1000);
+            AssertNextTMinMaxInRange<UInt128>(r, (UInt128)50, (UInt128)500);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_AllValuesInSmallRangeHit(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            const int rangeSize = 5;
+            AssertAllValuesHit<byte>(r, (byte)rangeSize);
+            AssertAllValuesHit<sbyte>(r, (sbyte)rangeSize);
+            AssertAllValuesHit<short>(r, (short)rangeSize);
+            AssertAllValuesHit<ushort>(r, (ushort)rangeSize);
+            AssertAllValuesHit<int>(r, rangeSize);
+            AssertAllValuesHit<uint>(r, (uint)rangeSize);
+            AssertAllValuesHit<long>(r, (long)rangeSize);
+            AssertAllValuesHit<ulong>(r, (ulong)rangeSize);
+            AssertAllValuesHit<nint>(r, (nint)rangeSize);
+            AssertAllValuesHit<nuint>(r, (nuint)rangeSize);
+            AssertAllValuesHit<Int128>(r, (Int128)rangeSize);
+            AssertAllValuesHit<UInt128>(r, (UInt128)rangeSize);
+
+            static void AssertAllValuesHit<T>(Random r, T maxExclusive) where T : IBinaryInteger<T>
+            {
+                HashSet<T> seen = [];
+                for (int i = 0; i < 10_000; i++)
+                {
+                    seen.Add(r.Next<T>(maxExclusive));
+                }
+
+                for (T v = T.Zero; v < maxExclusive; v++)
+                {
+                    Assert.Contains(v, seen);
+                }
+
+                Assert.DoesNotContain(maxExclusive, seen);
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_Parameterless_AllTypes(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTParameterless<byte>(r);
+            AssertNextTParameterless<sbyte>(r);
+            AssertNextTParameterless<short>(r);
+            AssertNextTParameterless<ushort>(r);
+            AssertNextTParameterless<int>(r);
+            AssertNextTParameterless<uint>(r);
+            AssertNextTParameterless<long>(r);
+            AssertNextTParameterless<ulong>(r);
+            AssertNextTParameterless<nint>(r);
+            AssertNextTParameterless<nuint>(r);
+            AssertNextTParameterless<Int128>(r);
+            AssertNextTParameterless<UInt128>(r);
+
+            static void AssertNextTParameterless<T>(Random r) where T : IBinaryInteger<T>, IMinMaxValue<T>
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    T value = r.Next<T>();
+                    Assert.True(!T.IsNegative(value), $"Next<{typeof(T).Name}>() returned negative value: {value}");
+                    Assert.True(value < T.MaxValue, $"Next<{typeof(T).Name}>() returned MaxValue");
+                }
+            }
+        }
+
+        public static IEnumerable<object[]> NextT_SignedOverflowRange_MemberData() =>
+            from derived in new[] { false, true }
+            from seeded in new[] { false, true }
+            select new object[] { derived, seeded };
+
+        [Theory]
+        [MemberData(nameof(NextT_SignedOverflowRange_MemberData))]
+        public void NextT_SignedOverflow_FullRange(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+
+            // These ranges exceed T.MaxValue, triggering the NextBinaryIntegerFullRange path.
+            AssertNextTMinMaxInRange<sbyte>(r, sbyte.MinValue, sbyte.MaxValue);
+            AssertNextTMinMaxInRange<short>(r, short.MinValue, short.MaxValue);
+            AssertNextTMinMaxInRange<int>(r, int.MinValue, int.MaxValue);
+            AssertNextTMinMaxInRange<long>(r, long.MinValue, long.MaxValue);
+            AssertNextTMinMaxInRange<nint>(r, nint.MinValue, nint.MaxValue);
+            AssertNextTMinMaxInRange<Int128>(r, Int128.MinValue, Int128.MaxValue);
+
+            // Ranges that cross zero with large span.
+            AssertNextTMinMaxInRange<int>(r, int.MinValue, 0);
+            AssertNextTMinMaxInRange<int>(r, -1, int.MaxValue);
+            AssertNextTMinMaxInRange<long>(r, long.MinValue, 0L);
+            AssertNextTMinMaxInRange<long>(r, -1L, long.MaxValue);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_LargeUnsignedValues(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+
+            // ulong values beyond long.MaxValue.
+            for (int i = 0; i < 100; i++)
+            {
+                ulong value = r.Next<ulong>(ulong.MaxValue);
+                Assert.True(value < ulong.MaxValue);
+            }
+
+            // Full uint range.
+            AssertNextTMaxValueInRange<uint>(r, uint.MaxValue);
+
+            // UInt128 large range.
+            AssertNextTMinMaxInRange<UInt128>(r, (UInt128)0, UInt128.MaxValue);
+
+            // nuint on the current platform.
+            AssertNextTMaxValueInRange<nuint>(r, nuint.MaxValue);
+
+            // Int128/UInt128 values that exceed ulong.MaxValue — these must bypass the
+            // ulong fast path and use rejection sampling.
+            UInt128 largeUInt128Max = ((UInt128)ulong.MaxValue << 1) + 5;
+            AssertNextTMaxValueInRange<UInt128>(r, largeUInt128Max);
+
+            Int128 largeInt128Max = (Int128)ulong.MaxValue + 100;
+            AssertNextTMaxValueInRange<Int128>(r, largeInt128Max);
+
+            // UInt128 maxExclusive = 2^64 (exactly one more than ulong.MaxValue)
+            // This previously truncated to 0 via ulong.CreateTruncating.
+            UInt128 twoTo64 = (UInt128)ulong.MaxValue + 1;
+            for (int i = 0; i < 100; i++)
+            {
+                UInt128 value = r.Next<UInt128>(twoTo64);
+                Assert.True(value < twoTo64, $"Next<UInt128>({twoTo64}) returned {value}");
+            }
+
+            // Int128 maxExclusive that truncates to a small value when cast to ulong
+            Int128 tricky = ((Int128)1 << 64) + 5;
+            for (int i = 0; i < 100; i++)
+            {
+                Int128 value = r.Next<Int128>(tricky);
+                Assert.True(value >= Int128.Zero && value < tricky, $"Next<Int128>({tricky}) returned {value}");
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_NegativeRanges(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextTMinMaxInRange<sbyte>(r, (sbyte)-100, (sbyte)-10);
+            AssertNextTMinMaxInRange<short>(r, (short)-1000, (short)-1);
+            AssertNextTMinMaxInRange<int>(r, -1_000_000, -1);
+            AssertNextTMinMaxInRange<long>(r, -1_000_000_000L, -1L);
+            AssertNextTMinMaxInRange<Int128>(r, (Int128)(-1000), (Int128)(-1));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextT_NintNuint_PlatformSpecific(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+
+            // nint parameterless (non-negative, < nint.MaxValue).
+            for (int i = 0; i < 100; i++)
+            {
+                nint value = r.Next<nint>();
+                Assert.True(value >= 0 && value < nint.MaxValue, $"Next<nint>() returned {value}");
+            }
+
+            // nuint parameterless (< nuint.MaxValue).
+            for (int i = 0; i < 100; i++)
+            {
+                nuint value = r.Next<nuint>();
+                Assert.True(value < nuint.MaxValue, $"Next<nuint>() returned {value}");
+            }
+
+            // Large nint/nuint ranges exercise the platform-specific fast paths.
+            AssertNextTMaxValueInRange<nint>(r, nint.MaxValue);
+            AssertNextTMaxValueInRange<nuint>(r, nuint.MaxValue);
+            AssertNextTMinMaxInRange<nint>(r, nint.MinValue, nint.MaxValue);
+            AssertNextTMinMaxInRange<nint>(r, (nint)(-1), nint.MaxValue);
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextFloatT_AllTypes_InRange(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextFloatInRange<Half>(r);
+            AssertNextFloatInRange<BFloat16>(r);
+            AssertNextFloatInRange<float>(r);
+            AssertNextFloatInRange<double>(r);
+            AssertNextFloatInRange<NFloat>(r);
+
+            static void AssertNextFloatInRange<T>(Random r) where T : IBinaryFloatingPointIeee754<T>
+            {
+                for (int i = 0; i < 1000; i++)
+                {
+                    T value = r.NextFloat<T>();
+                    Assert.True(value >= T.Zero, $"NextFloat<{typeof(T).Name}>() returned {value}, expected >= 0");
+                    Assert.True(value < T.One, $"NextFloat<{typeof(T).Name}>() returned {value}, expected < 1");
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void NextFloatT_ProducesVariedValues(bool derived, bool seeded)
+        {
+            Random r = Create(derived, seeded);
+            AssertNextFloatVaried<Half>(r);
+            AssertNextFloatVaried<BFloat16>(r);
+            AssertNextFloatVaried<float>(r);
+            AssertNextFloatVaried<double>(r);
+            AssertNextFloatVaried<NFloat>(r);
+
+            static void AssertNextFloatVaried<T>(Random r) where T : IBinaryFloatingPointIeee754<T>
+            {
+                HashSet<T> seen = [];
+                for (int i = 0; i < 100; i++)
+                {
+                    seen.Add(r.NextFloat<T>());
+                }
+
+                Assert.True(seen.Count > 50, $"NextFloat<{typeof(T).Name}>() produced only {seen.Count} distinct values in 100 calls");
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void NextT_DerivedType_DispatchesThroughVirtuals(bool seeded)
+        {
+            // Next<T>() routes through Next(int), NextInt64(long), or NextBytes(Span<byte>),
+            // all of which are virtual. For a derived Random, these must reach the derived
+            // type's overrides so that subclass behavior (e.g. custom RNG) is preserved.
+            // SubRandom.Next() sets NextCalled; the compat path routes Next(int)/NextInt64/
+            // NextSingle/NextDouble through Sample(), which sets SampleCalled.
+
+            SubRandom r;
+
+            // Integer types that hit Next(int) → Sample()
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.Next<int>(42);
+            Assert.True(r.SampleCalled, "Next<int> should dispatch through Sample on derived type");
+
+            // Integer types that hit NextInt64(long) → Sample()
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.Next<long>(42L);
+            Assert.True(r.SampleCalled, "Next<long> should dispatch through Sample on derived type");
+
+            // Large types that hit NextBytes → Next() → NextCalled
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.Next<UInt128>(UInt128.MaxValue);
+            Assert.True(r.NextCalled, "Next<UInt128> should dispatch through Next on derived type");
+
+            // NextFloat<float> → NextSingle() → Sample()
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.NextFloat<float>();
+            Assert.True(r.SampleCalled, "NextFloat<float> should dispatch through Sample on derived type");
+
+            // NextFloat<double> → NextDouble() → Sample()
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.NextFloat<double>();
+            Assert.True(r.SampleCalled, "NextFloat<double> should dispatch through Sample on derived type");
+
+            // NextFloat<Half> → NextInt64() → Sample()
+            r = seeded ? new SubRandom(42) : new SubRandom();
+            r.NextFloat<Half>();
+            Assert.True(r.SampleCalled, "NextFloat<Half> should dispatch through Sample on derived type");
+        }
+
+        private static void AssertNextTMaxValueInRange<T>(Random r, T maxExclusive, int iterations = 100) where T : IBinaryInteger<T>
+        {
+            for (int i = 0; i < iterations; i++)
+            {
+                T value = r.Next<T>(maxExclusive);
+                Assert.True(!T.IsNegative(value), $"Next<{typeof(T).Name}>({maxExclusive}) returned negative: {value}");
+                Assert.True(value < maxExclusive, $"Next<{typeof(T).Name}>({maxExclusive}) returned {value}, expected < {maxExclusive}");
+            }
+        }
+
+        private static void AssertNextTMinMaxInRange<T>(Random r, T min, T max, int iterations = 100) where T : IBinaryInteger<T>
+        {
+            for (int i = 0; i < iterations; i++)
+            {
+                T value = r.Next<T>(min, max);
+                Assert.True(value >= min, $"Next<{typeof(T).Name}>({min}, {max}) returned {value}, expected >= {min}");
+                Assert.True(value < max, $"Next<{typeof(T).Name}>({min}, {max}) returned {value}, expected < {max}");
             }
         }
 
