@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Versioning;
 
 namespace System
@@ -298,6 +299,21 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         [Intrinsic]
         public static uint PopCount(uint value) => (uint)BitOperations.PopCount(value);
+
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        [Intrinsic]
+        public static uint ReverseBits(uint value)
+        {
+            if (ArmBase.IsSupported)
+            {
+                return ArmBase.ReverseElementBits(value);
+            }
+
+            value = ((value >> 1) & 0x55555555u) | ((value & 0x55555555u) << 1);
+            value = ((value >> 2) & 0x33333333u) | ((value & 0x33333333u) << 2);
+            value = ((value >> 4) & 0x0F0F0F0Fu) | ((value & 0x0F0F0F0Fu) << 4);
+            return BinaryPrimitives.ReverseEndianness(value);
+        }
 
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         [Intrinsic]

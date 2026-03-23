@@ -371,6 +371,45 @@ namespace System.Numerics
             return value;
         }
 
+        /// <summary>Reverses the bits in a value.</summary>
+        /// <param name="value">The value whose bits are to be reversed.</param>
+        /// <returns>The value with its bits reversed.</returns>
+        static virtual TSelf ReverseBits(TSelf value)
+        {
+            if (!typeof(TSelf).IsValueType)
+            {
+                ArgumentNullException.ThrowIfNull(value);
+            }
+
+            int byteCount = value!.GetByteCount();
+            bool isUnsigned = !TSelf.IsNegative(TSelf.AllBitsSet);
+
+            byte[] buffer = new byte[byteCount];
+            value.TryWriteLittleEndian(buffer, out _);
+
+            // Full bit reversal = per-byte bit reversal + byte order reversal.
+            // Process from both ends simultaneously to achieve byte order reversal in-place.
+            for (int lo = 0, hi = byteCount - 1; lo <= hi; lo++, hi--)
+            {
+                byte a = buffer[lo];
+                byte b = buffer[hi];
+
+                a = (byte)(((a >> 1) & 0x55) | ((a & 0x55) << 1));
+                a = (byte)(((a >> 2) & 0x33) | ((a & 0x33) << 2));
+                a = (byte)((a >> 4) | (a << 4));
+
+                b = (byte)(((b >> 1) & 0x55) | ((b & 0x55) << 1));
+                b = (byte)(((b >> 2) & 0x33) | ((b & 0x33) << 2));
+                b = (byte)((b >> 4) | (b << 4));
+
+                buffer[lo] = b;
+                buffer[hi] = a;
+            }
+
+            TSelf.TryReadLittleEndian(buffer, isUnsigned, out TSelf result);
+            return result;
+        }
+
         /// <summary>Rotates a value left by a given amount.</summary>
         /// <param name="value">The value which is rotated left by <paramref name="rotateAmount" />.</param>
         /// <param name="rotateAmount">The amount by which <paramref name="value" /> is rotated left.</param>

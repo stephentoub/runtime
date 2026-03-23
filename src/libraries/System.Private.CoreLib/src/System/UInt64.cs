@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Versioning;
 
 namespace System
@@ -297,6 +298,21 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         [Intrinsic]
         public static ulong PopCount(ulong value) => (ulong)BitOperations.PopCount(value);
+
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        [Intrinsic]
+        public static ulong ReverseBits(ulong value)
+        {
+            if (ArmBase.Arm64.IsSupported)
+            {
+                return ArmBase.Arm64.ReverseElementBits(value);
+            }
+
+            value = ((value >> 1) & 0x5555555555555555ul) | ((value & 0x5555555555555555ul) << 1);
+            value = ((value >> 2) & 0x3333333333333333ul) | ((value & 0x3333333333333333ul) << 2);
+            value = ((value >> 4) & 0x0F0F0F0F0F0F0F0Ful) | ((value & 0x0F0F0F0F0F0F0F0Ful) << 4);
+            return BinaryPrimitives.ReverseEndianness(value);
+        }
 
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         [Intrinsic]

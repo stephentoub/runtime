@@ -290,6 +290,9 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         public static sbyte PopCount(sbyte value) => (sbyte)BitOperations.PopCount((byte)value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static sbyte ReverseBits(sbyte value) => (sbyte)byte.ReverseBits((byte)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static sbyte RotateLeft(sbyte value, int rotateAmount) => (sbyte)((value << (rotateAmount & 7)) | ((byte)value >> ((8 - rotateAmount) & 7)));
 

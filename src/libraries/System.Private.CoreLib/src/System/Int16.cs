@@ -287,6 +287,9 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         public static short PopCount(short value) => (short)BitOperations.PopCount((ushort)value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static short ReverseBits(short value) => (short)ushort.ReverseBits((ushort)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static short RotateLeft(short value, int rotateAmount) => (short)((value << (rotateAmount & 15)) | ((ushort)value >> ((16 - rotateAmount) & 15)));
 

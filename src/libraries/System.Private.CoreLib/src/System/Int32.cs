@@ -304,6 +304,10 @@ namespace System
         [Intrinsic]
         public static int PopCount(int value) => BitOperations.PopCount((uint)value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        [Intrinsic]
+        public static int ReverseBits(int value) => (int)uint.ReverseBits((uint)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         [Intrinsic]
         public static int RotateLeft(int value, int rotateAmount) => (int)BitOperations.RotateLeft((uint)value, rotateAmount);

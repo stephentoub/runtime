@@ -373,6 +373,23 @@ namespace System.Tests
         }
 
         [Fact]
+        public static void ReverseBitsTest()
+        {
+            if (Environment.Is64BitProcess)
+            {
+                Assert.Equal(unchecked((nuint)0x0000000000000000), BinaryIntegerHelper<nuint>.ReverseBits(unchecked((nuint)0x0000000000000000)));
+                Assert.Equal(unchecked((nuint)0x8000000000000000), BinaryIntegerHelper<nuint>.ReverseBits(unchecked((nuint)0x0000000000000001)));
+                Assert.Equal(unchecked((nuint)0x0000000000000001), BinaryIntegerHelper<nuint>.ReverseBits(unchecked((nuint)0x8000000000000000)));
+            }
+            else
+            {
+                Assert.Equal((nuint)0x00000000, BinaryIntegerHelper<nuint>.ReverseBits((nuint)0x00000000));
+                Assert.Equal((nuint)0x80000000, BinaryIntegerHelper<nuint>.ReverseBits((nuint)0x00000001));
+                Assert.Equal((nuint)0x00000001, BinaryIntegerHelper<nuint>.ReverseBits((nuint)0x80000000));
+            }
+        }
+
+        [Fact]
         public static void RotateLeftTest()
         {
             if (Environment.Is64BitProcess)

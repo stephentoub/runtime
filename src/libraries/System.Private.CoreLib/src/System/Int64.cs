@@ -301,6 +301,10 @@ namespace System
         [Intrinsic]
         public static long PopCount(long value) => BitOperations.PopCount((ulong)value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        [Intrinsic]
+        public static long ReverseBits(long value) => (long)ulong.ReverseBits((ulong)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         [Intrinsic]
         public static long RotateLeft(long value, int rotateAmount) => (long)BitOperations.RotateLeft((ulong)value, rotateAmount);

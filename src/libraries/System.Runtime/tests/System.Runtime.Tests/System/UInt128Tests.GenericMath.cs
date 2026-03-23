@@ -241,6 +241,15 @@ namespace System.Tests
         }
 
         [Fact]
+        public static void ReverseBitsTest()
+        {
+            Assert.Equal(new UInt128(0x0000000000000000, 0x0000000000000000), BinaryIntegerHelper<UInt128>.ReverseBits(new UInt128(0x0000000000000000, 0x0000000000000000)));
+            Assert.Equal(new UInt128(0x8000000000000000, 0x0000000000000000), BinaryIntegerHelper<UInt128>.ReverseBits(new UInt128(0x0000000000000000, 0x0000000000000001)));
+            Assert.Equal(new UInt128(0x0000000000000000, 0x0000000000000001), BinaryIntegerHelper<UInt128>.ReverseBits(new UInt128(0x8000000000000000, 0x0000000000000000)));
+            Assert.Equal(new UInt128(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF), BinaryIntegerHelper<UInt128>.ReverseBits(new UInt128(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF)));
+        }
+
+        [Fact]
         public static void RotateLeftTest()
         {
             Assert.Equal(new UInt128(0x0000_0000_0000_0000, 0x0000_0000_0000_0000), BinaryIntegerHelper<UInt128>.RotateLeft(Zero, 1));

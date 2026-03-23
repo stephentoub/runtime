@@ -730,6 +730,10 @@ namespace System
         public static Int128 PopCount(Int128 value)
             => ulong.PopCount(value._lower) + ulong.PopCount(value._upper);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static Int128 ReverseBits(Int128 value)
+            => (Int128)UInt128.ReverseBits((UInt128)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static Int128 RotateLeft(Int128 value, int rotateAmount)
             => (value << rotateAmount) | (value >>> (128 - rotateAmount));

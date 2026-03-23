@@ -281,6 +281,16 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         public static ushort PopCount(ushort value) => (ushort)BitOperations.PopCount(value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static ushort ReverseBits(ushort value)
+        {
+            uint v = value;
+            v = ((v >> 1) & 0x5555u) | ((v & 0x5555u) << 1);
+            v = ((v >> 2) & 0x3333u) | ((v & 0x3333u) << 2);
+            v = ((v >> 4) & 0x0F0Fu) | ((v & 0x0F0Fu) << 4);
+            return BinaryPrimitives.ReverseEndianness((ushort)v);
+        }
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static ushort RotateLeft(ushort value, int rotateAmount) => (ushort)((value << (rotateAmount & 15)) | (value >> ((16 - rotateAmount) & 15)));
 

@@ -66,6 +66,8 @@ namespace System
 
         public static TSelf PopCount(TSelf value) => TSelf.PopCount(value);
 
+        public static TSelf ReverseBits(TSelf value) => TSelf.ReverseBits(value);
+
         public static TSelf ReadBigEndian(byte[] source, bool isUnsigned) => TSelf.ReadBigEndian(source, isUnsigned);
 
         public static TSelf ReadBigEndian(byte[] source, int startIndex, bool isUnsigned) => TSelf.ReadBigEndian(source, startIndex, isUnsigned);

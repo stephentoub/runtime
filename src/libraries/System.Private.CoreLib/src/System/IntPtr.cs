@@ -324,6 +324,9 @@ namespace System
         [Intrinsic]
         public static nint PopCount(nint value) => BitOperations.PopCount((nuint)value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static nint ReverseBits(nint value) => (nint)nuint.ReverseBits((nuint)value);
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         [Intrinsic]
         public static nint RotateLeft(nint value, int rotateAmount) => (nint)BitOperations.RotateLeft((nuint)value, rotateAmount);

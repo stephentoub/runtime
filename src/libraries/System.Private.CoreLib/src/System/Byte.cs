@@ -284,6 +284,14 @@ namespace System
         /// <inheritdoc cref="IBinaryInteger{TSelf}.PopCount(TSelf)" />
         public static byte PopCount(byte value) => (byte)BitOperations.PopCount(value);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static byte ReverseBits(byte value)
+        {
+            value = (byte)(((value >> 1) & 0x55) | ((value & 0x55) << 1));
+            value = (byte)(((value >> 2) & 0x33) | ((value & 0x33) << 2));
+            return (byte)((value >> 4) | (value << 4));
+        }
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static byte RotateLeft(byte value, int rotateAmount) => (byte)((value << (rotateAmount & 7)) | (value >> ((8 - rotateAmount) & 7)));
 

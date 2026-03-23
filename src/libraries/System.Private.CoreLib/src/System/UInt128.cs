@@ -801,6 +801,10 @@ namespace System
         public static UInt128 PopCount(UInt128 value)
             => ulong.PopCount(value._lower) + ulong.PopCount(value._upper);
 
+        /// <inheritdoc cref="IBinaryInteger{TSelf}.ReverseBits(TSelf)" />
+        public static UInt128 ReverseBits(UInt128 value)
+            => new UInt128(ulong.ReverseBits(value._lower), ulong.ReverseBits(value._upper));
+
         /// <inheritdoc cref="IBinaryInteger{TSelf}.RotateLeft(TSelf, int)" />
         public static UInt128 RotateLeft(UInt128 value, int rotateAmount)
             => (value << rotateAmount) | (value >>> (128 - rotateAmount));
