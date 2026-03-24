@@ -274,7 +274,7 @@
     <value>Invalid text declaration.</value>
   </data>
   <data name="Xml_InvalidBase64Value" xml:space="preserve">
-    <value>'{0}' is not a valid Base64 text sequence.</value>
+    <value>'{0}' is not a valid Base64 character.</value>
   </data>
   <data name="Xml_UndeclaredEntity" xml:space="preserve">
     <value>Reference to undeclared entity '{0}'.</value>
