@@ -3227,39 +3227,29 @@ namespace System.Runtime.Intrinsics
             where TVectorInt64 : unmanaged, ISimdVector<TVectorInt64, long>
             where TVectorUInt64 : unmanaged, ISimdVector<TVectorUInt64, ulong>
         {
-            // The AMD AOCL-LibM scalar acosh implementation (acosh.c) uses range-based
-            // polynomial lookup tables which cannot be trivially vectorized due to the cost
-            // of gather instructions. Instead, this uses the mathematical identity:
-            //   acosh(x) = log(x + sqrt(x^2 - 1))
-            // with special handling for x near 1 and large x for improved accuracy.
+            // This uses the mathematical identity:
+            //   acosh(x) = log(x + sqrt((x - 1) * (x + 1)))
+            // using (x-1)*(x+1) instead of x^2-1 to avoid catastrophic cancellation
+            // near x=1, with a large-value optimization using log(2) + log(x) for
+            // x > 2^28 to avoid overflow in x^2.
 
             const double LN2 = 0.693147180559945309417;
-            const double NEAR_ONE_THRESHOLD = 1.0 + 2.98023223876953125e-08; // 1 + 2^-25
             const double LARGE_THRESHOLD = 268435456.0; // 2^28
 
             // Return NaN for x < 1
             TVectorDouble nanMask = TVectorDouble.LessThan(x, TVectorDouble.One);
 
-            // For x close to 1 (1 < x <= 1 + 2^-25), use sqrt(2 * (x - 1))
-            TVectorDouble nearOneMask = TVectorDouble.LessThanOrEqual(x, TVectorDouble.Create(NEAR_ONE_THRESHOLD));
-
             // For large values (x > 2^28), use log(2) + log(x)
             TVectorDouble largeMask = TVectorDouble.GreaterThan(x, TVectorDouble.Create(LARGE_THRESHOLD));
 
-            // Normal case: log(x + sqrt(x^2 - 1))
-            TVectorDouble x2 = x * x;
-            TVectorDouble sqrtArg = x2 - TVectorDouble.One;
-            TVectorDouble normal = LogDouble<TVectorDouble, TVectorInt64, TVectorUInt64>(x + TVectorDouble.Sqrt(sqrtArg));
+            // Normal case: log(x + sqrt((x - 1) * (x + 1)))
+            TVectorDouble normal = LogDouble<TVectorDouble, TVectorInt64, TVectorUInt64>(x + TVectorDouble.Sqrt((x - TVectorDouble.One) * (x + TVectorDouble.One)));
 
             // Large value case: log(2) + log(x)
             TVectorDouble large = TVectorDouble.Create(LN2) + LogDouble<TVectorDouble, TVectorInt64, TVectorUInt64>(x);
 
-            // Near one case: sqrt(2 * (x - 1))
-            TVectorDouble nearOne = TVectorDouble.Sqrt(TVectorDouble.Create(2.0) * (x - TVectorDouble.One));
-
             // Select appropriate result based on magnitude
             TVectorDouble result = TVectorDouble.ConditionalSelect(largeMask, large, normal);
-            result = TVectorDouble.ConditionalSelect(nearOneMask, nearOne, result);
             result = TVectorDouble.ConditionalSelect(nanMask, TVectorDouble.Create(double.NaN), result);
 
             return result;
@@ -3274,16 +3264,15 @@ namespace System.Runtime.Intrinsics
             where TVectorUInt64 : unmanaged, ISimdVector<TVectorUInt64, ulong>
         {
             // This code is based on `acoshf` from amd/aocl-libm-ose
-            // Copyright (C) 2008-2022 Advanced Micro Devices, Inc. All rights reserved.
+            // Copyright (C) 2008-2020 Advanced Micro Devices, Inc. All rights reserved.
             //
             // Licensed under the BSD 3-Clause "New" or "Revised" License
             // See THIRD-PARTY-NOTICES.TXT for the full license text
 
-            // AMD acoshf.c uses mathematical identities (no polynomial approximation):
-            // For x > 1/sqrt(eps): acosh(x) = log(2) + log(x)
-            // For 2 < x <= 1/sqrt(eps): acosh(x) = log(x + sqrt(x^2 - 1))
-            // For sqrt(eps) <= x <= 2: t=x-1, acosh(x) = log1p(t + sqrt(2t + t^2))
-            // Widens to double for improved accuracy, matching AMD acoshf.c behavior.
+            // This implementation computes single-precision acosh by widening the
+            // input to double precision, calling AcoshDouble, and then narrowing
+            // the result back to single precision. AcoshDouble uses mathematical
+            // identities (no polynomial approximation) for improved accuracy.
 
             if (TVectorSingle.ElementCount == TVectorDouble.ElementCount)
             {

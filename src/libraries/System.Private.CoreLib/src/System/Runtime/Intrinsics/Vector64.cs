@@ -778,47 +778,6 @@ namespace System.Runtime.Intrinsics
             return result;
         }
 
-        /// <summary>Computes the arc sine of each element in a vector.</summary>
-        /// <param name="vector">The vector whose arc sine is to be computed.</param>
-        /// <returns>A vector whose elements are the arc sine of the corresponding elements in <paramref name="vector" />.</returns>
-        /// <remarks>The angles are returned in radians, and the input should be in the range [-1, 1].</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector64<double> Asin(Vector64<double> vector)
-        {
-            if (IsHardwareAccelerated)
-            {
-                return VectorMath.AsinDouble<Vector64<double>, Vector64<ulong>>(vector);
-            }
-            else
-            {
-                return Asin<double>(vector);
-            }
-        }
-
-        /// <summary>Computes the arc sine of each element in a vector.</summary>
-        /// <param name="vector">The vector whose arc sine is to be computed.</param>
-        /// <returns>A vector whose elements are the arc sine of the corresponding elements in <paramref name="vector" />.</returns>
-        /// <remarks>The angles are returned in radians, and the input should be in the range [-1, 1].</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector64<float> Asin(Vector64<float> vector)
-        {
-            if (IsHardwareAccelerated)
-            {
-                if (Vector128.IsHardwareAccelerated)
-                {
-                    return VectorMath.AsinSingle<Vector64<float>, Vector64<int>, Vector128<double>, Vector128<long>>(vector);
-                }
-                else
-                {
-                    return VectorMath.AsinSingle<Vector64<float>, Vector64<int>, Vector64<double>, Vector64<long>>(vector);
-                }
-            }
-            else
-            {
-                return Asin<float>(vector);
-            }
-        }
-
         /// <summary>Computes the inverse hyperbolic cosine of each element in a vector.</summary>
         /// <param name="vector">The vector whose inverse hyperbolic cosine is to be computed.</param>
         /// <returns>A vector whose elements are the inverse hyperbolic cosine of the corresponding elements in <paramref name="vector" />.</returns>
@@ -857,6 +816,47 @@ namespace System.Runtime.Intrinsics
             else
             {
                 return Acosh<float>(vector);
+            }
+        }
+
+        /// <summary>Computes the arc sine of each element in a vector.</summary>
+        /// <param name="vector">The vector whose arc sine is to be computed.</param>
+        /// <returns>A vector whose elements are the arc sine of the corresponding elements in <paramref name="vector" />.</returns>
+        /// <remarks>The angles are returned in radians, and the input should be in the range [-1, 1].</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector64<double> Asin(Vector64<double> vector)
+        {
+            if (IsHardwareAccelerated)
+            {
+                return VectorMath.AsinDouble<Vector64<double>, Vector64<ulong>>(vector);
+            }
+            else
+            {
+                return Asin<double>(vector);
+            }
+        }
+
+        /// <summary>Computes the arc sine of each element in a vector.</summary>
+        /// <param name="vector">The vector whose arc sine is to be computed.</param>
+        /// <returns>A vector whose elements are the arc sine of the corresponding elements in <paramref name="vector" />.</returns>
+        /// <remarks>The angles are returned in radians, and the input should be in the range [-1, 1].</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector64<float> Asin(Vector64<float> vector)
+        {
+            if (IsHardwareAccelerated)
+            {
+                if (Vector128.IsHardwareAccelerated)
+                {
+                    return VectorMath.AsinSingle<Vector64<float>, Vector64<int>, Vector128<double>, Vector128<long>>(vector);
+                }
+                else
+                {
+                    return VectorMath.AsinSingle<Vector64<float>, Vector64<int>, Vector64<double>, Vector64<long>>(vector);
+                }
+            }
+            else
+            {
+                return Asin<float>(vector);
             }
         }
 

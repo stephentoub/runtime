@@ -27,7 +27,7 @@ namespace System.Numerics.Tensors
             InvokeSpanIntoSpan<T, AcoshOperator<T>>(x, destination);
 
         /// <summary>T.Acosh(x)</summary>
-        internal readonly struct AcoshOperator<T> : IUnaryOperator<T, T>
+        private readonly struct AcoshOperator<T> : IUnaryOperator<T, T>
             where T : IHyperbolicFunctions<T>
         {
             public static bool Vectorizable =>

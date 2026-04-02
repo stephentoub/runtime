@@ -814,47 +814,6 @@ namespace System.Runtime.Intrinsics
             Unsafe.WriteUnaligned(ref Unsafe.As<T, byte>(ref MemoryMarshal.GetReference(destination)), vector);
         }
 
-        /// <inheritdoc cref="Vector128.Asin(Vector128{double})" />
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector256<double> Asin(Vector256<double> vector)
-        {
-            if (IsHardwareAccelerated)
-            {
-                return VectorMath.AsinDouble<Vector256<double>, Vector256<ulong>>(vector);
-            }
-            else
-            {
-                return Create(
-                    Vector128.Asin(vector._lower),
-                    Vector128.Asin(vector._upper)
-                );
-            }
-        }
-
-        /// <inheritdoc cref="Vector128.Asin(Vector128{float})" />
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vector256<float> Asin(Vector256<float> vector)
-        {
-            if (IsHardwareAccelerated)
-            {
-                if (Vector512.IsHardwareAccelerated)
-                {
-                    return VectorMath.AsinSingle<Vector256<float>, Vector256<int>, Vector512<double>, Vector512<long>>(vector);
-                }
-                else
-                {
-                    return VectorMath.AsinSingle<Vector256<float>, Vector256<int>, Vector256<double>, Vector256<long>>(vector);
-                }
-            }
-            else
-            {
-                return Create(
-                    Vector128.Asin(vector._lower),
-                    Vector128.Asin(vector._upper)
-                );
-            }
-        }
-
         /// <summary>Computes the inverse hyperbolic cosine of each element in a vector.</summary>
         /// <param name="vector">The vector whose inverse hyperbolic cosine is to be computed.</param>
         /// <returns>A vector whose elements are the inverse hyperbolic cosine of the corresponding elements in <paramref name="vector" />.</returns>
@@ -898,6 +857,47 @@ namespace System.Runtime.Intrinsics
                 return Create(
                     Vector128.Acosh(vector._lower),
                     Vector128.Acosh(vector._upper)
+                );
+            }
+        }
+
+        /// <inheritdoc cref="Vector128.Asin(Vector128{double})" />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<double> Asin(Vector256<double> vector)
+        {
+            if (IsHardwareAccelerated)
+            {
+                return VectorMath.AsinDouble<Vector256<double>, Vector256<ulong>>(vector);
+            }
+            else
+            {
+                return Create(
+                    Vector128.Asin(vector._lower),
+                    Vector128.Asin(vector._upper)
+                );
+            }
+        }
+
+        /// <inheritdoc cref="Vector128.Asin(Vector128{float})" />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Vector256<float> Asin(Vector256<float> vector)
+        {
+            if (IsHardwareAccelerated)
+            {
+                if (Vector512.IsHardwareAccelerated)
+                {
+                    return VectorMath.AsinSingle<Vector256<float>, Vector256<int>, Vector512<double>, Vector512<long>>(vector);
+                }
+                else
+                {
+                    return VectorMath.AsinSingle<Vector256<float>, Vector256<int>, Vector256<double>, Vector256<long>>(vector);
+                }
+            }
+            else
+            {
+                return Create(
+                    Vector128.Asin(vector._lower),
+                    Vector128.Asin(vector._upper)
                 );
             }
         }
