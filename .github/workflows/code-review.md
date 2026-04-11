@@ -6,37 +6,39 @@ permissions:
   issues: read
   pull-requests: read
 
-
-network:
-  allowed:
-    - defaults
+network: defaults
 
 tools:
   github:
     mode: remote
     toolsets: [default, search]
+    min-integrity: none
   web-fetch:
 
 checkout:
   fetch-depth: 50
 
 safe-outputs:
+  report-failure-as-issue: false
   add-comment:
     max: 1
-    target: "triggering"
+    target: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
     hide-older-comments: true
+    allowed-reasons: [outdated]
     discussions: false
     issues: false
 
-timeout-minutes: 30
+timeout-minutes: 45
 
 concurrency:
   group: code-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
   cancel-in-progress: true
 
 on:
-  pull_request:
-    types: [opened, synchronize]
+  slash_command:
+    name: code-review
+    events: [pull_request_comment,pull_request_review_comment]
+
   workflow_dispatch:
     inputs:
       pr_number:
